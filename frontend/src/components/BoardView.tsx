@@ -45,10 +45,16 @@ function BoardView({
 }: BoardViewProps) {
   const prefix = `p${playerId}-`;
 
+  // Cells render with a prefixed DOM id (p1-/p2-) for uniqueness, but the game
+  // logic (legal/picked) uses unprefixed ids. Strip the prefix before dispatching
+  // so the clicked id matches the ids produced by the legality calculation.
+  const handleSelect = (domId: string) =>
+    onSelect(domId.startsWith(prefix) ? domId.slice(prefix.length) : domId);
+
   const cellProps = (id: string) => ({
     highlighted: interactive && legal.has(id),
     provisional: interactive && picked.has(id),
-    onSelect: interactive ? onSelect : undefined,
+    onSelect: interactive ? handleSelect : undefined,
   });
 
   return (

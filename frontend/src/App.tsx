@@ -4,7 +4,8 @@ import DicePool from "./components/DicePool";
 import DiscardSquare from "./components/DiscardSquare";
 import WhiteColorChooser from "./components/WhiteColorChooser";
 import GameControls from "./components/GameControls";
-import { createInitialState, gameReducer } from "./game/reducer";
+import { createInitialState } from "./game/reducer";
+import { loggingReducer } from "./game/debug";
 import {
   activeContext,
   anyAvailableDieHasMove,
@@ -16,7 +17,7 @@ import { ALL_DIE_COLORS, PLAYER_IDS, type PlayerId } from "./game/types";
 import "./App.css";
 
 function App() {
-  const [state, dispatch] = useReducer(gameReducer, undefined, createInitialState);
+  const [state, dispatch] = useReducer(loggingReducer, undefined, createInitialState);
   const { phase, selection } = state;
 
   const legalSet = useMemo(() => new Set(selection?.legal ?? []), [selection]);
