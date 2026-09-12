@@ -1,74 +1,31 @@
-import {
-  DIE_COLOR_OPTIONS,
-  DIE_VALUES,
-  type DieColor,
-  type DieState,
-} from "../boardData";
+import Die, { dieColorMeta } from "./Die";
+import type { ChosenDie } from "../game/types";
 
 interface DieSlotProps {
+  /** Slot element id: e.g. p1-die-1. */
   id: string;
+  /** Roman label I, II, III. */
   label: string;
-  state: DieState;
-  onValueChange: (id: string, value: number | "") => void;
-  onColorChange: (id: string, color: DieColor | "") => void;
+  /** The die placed in this slot, or null when still empty. */
+  slot: ChosenDie | null;
+  /** True when this slot corresponds to the current active round. */
+  active: boolean;
 }
 
 /**
- * A die slot: lets the user manually pick a value (1-6 or none) and a color.
- * The chosen color becomes the die background, with a contrasted digit.
+ * A round slot. Game-driven: it displays the die validated during that round
+ * (die-1, die-2, die-3). The player never edits it manually.
  */
-function DieSlot({ id, label, state, onValueChange, onColorChange }: DieSlotProps) {
-  const colorOption = DIE_COLOR_OPTIONS.find((c) => c.value === state.color);
-  const valueId = `${id}-value`;
-  const colorId = `${id}-color`;
-
-  const dieStyle = colorOption
-    ? { background: colorOption.background, color: colorOption.text }
-    : undefined;
-
+function DieSlot({ id, label, slot, active }: DieSlotProps) {
   return (
-    <div className="die-slot">
+    <div className={`die-slot${active ? " is-active" : ""}`}>
       <div className="die-slot-title">{label}</div>
-      <div id={id} className="die-face" style={dieStyle} aria-label={`Dé ${label}`}>
-        {state.value !== "" ? state.value : ""}
-      </div>
-      <div className="die-controls">
-        <label className="die-control" htmlFor={valueId}>
-          <span>Valeur</span>
-          <select
-            id={valueId}
-            value={state.value === "" ? "" : String(state.value)}
-            onChange={(event) => {
-              const raw = event.target.value;
-              onValueChange(id, raw === "" ? "" : Number(raw));
-            }}
-          >
-            <option value="">—</option>
-            {DIE_VALUES.map((v) => (
-              <option key={v} value={v}>
-                {v}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="die-control" htmlFor={colorId}>
-          <span>Couleur</span>
-          <select
-            id={colorId}
-            value={state.color}
-            onChange={(event) =>
-              onColorChange(id, event.target.value as DieColor | "")
-            }
-          >
-            <option value="">—</option>
-            {DIE_COLOR_OPTIONS.map((c) => (
-              <option key={c.value} value={c.value}>
-                {c.label}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
+      {slot ? (
+        <Die id={id} color={slot.color} value={slot.value} />
+      ) : (
+        <div id={id} className="die-face-empty" aria-label={`Emplacement ${label} vide`} />
+      )}
+      {slot && <span className="die-slot-caption">{dieColorMeta(slot.color).label}</span>}
     </div>
   );
 }

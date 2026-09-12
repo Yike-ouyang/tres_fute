@@ -1,233 +1,149 @@
-import { useState } from "react";
-import CheckboxCell from "./components/CheckboxCell";
-import NumberCell from "./components/NumberCell";
-import FixedCell from "./components/FixedCell";
-import DieSlot from "./components/DieSlot";
+import { useMemo, useReducer } from "react";
+import BoardView from "./components/BoardView";
+import DicePool from "./components/DicePool";
+import DiscardSquare from "./components/DiscardSquare";
+import WhiteColorChooser from "./components/WhiteColorChooser";
+import GameControls from "./components/GameControls";
+import { createInitialState, gameReducer } from "./game/reducer";
 import {
-  BLUE_CENTER_INDEX,
-  BLUE_CENTER_VALUE,
-  BROWN_NUMBERS,
-  DIE_IDS,
-  DIE_LABELS,
-  ROW_NUMBERS,
-  type DieColor,
-  type DieState,
-} from "./boardData";
+  activeContext,
+  anyAvailableDieHasMove,
+  anyDiscardedDieHasMove,
+  colorAvailability,
+  passiveContext,
+} from "./game/rules";
+import { ALL_DIE_COLORS, PLAYER_IDS, type PlayerId } from "./game/types";
 import "./App.css";
 
-type Checks = Record<string, boolean>;
-type Inputs = Record<string, string>;
-type Dice = Record<string, DieState>;
-
-function createInitialDice(): Dice {
-  const dice: Dice = {};
-  for (const id of DIE_IDS) {
-    dice[id] = { value: "", color: "" };
-  }
-  return dice;
-}
-
 function App() {
-  const [checks, setChecks] = useState<Checks>({});
-  const [inputs, setInputs] = useState<Inputs>({});
-  const [dice, setDice] = useState<Dice>(createInitialDice);
+  const [state, dispatch] = useReducer(gameReducer, undefined, createInitialState);
+  const { phase, selection } = state;
 
-  const toggleCheck = (id: string) => {
-    setChecks((prev) => ({ ...prev, [id]: !prev[id] }));
-  };
+  const legalSet = useMemo(() => new Set(selection?.legal ?? []), [selection]);
+  const pickedSet = useMemo(() => new Set(selection?.picked ?? []), [selection]);
 
-  const setInput = (id: string, value: string) => {
-    setInputs((prev) => ({ ...prev, [id]: value }));
-  };
+  // Who must act, and in which mode.
+  const actingPlayer: PlayerId | null =
+    phase.kind === "active"
+      ? phase.player
+      : phase.kind === "passive" && !phase.done
+      ? phase.player
+      : null;
 
-  const setDieValue = (id: string, value: number | "") => {
-    setDice((prev) => ({ ...prev, [id]: { ...prev[id], value } }));
-  };
+  const isActive = phase.kind === "active";
+  const isPassiveOpen = phase.kind === "passive" && !phase.done;
 
-  const setDieColor = (id: string, color: DieColor | "") => {
-    setDice((prev) => ({ ...prev, [id]: { ...prev[id], color } }));
-  };
+  const availableCount = ALL_DIE_COLORS.filter(
+    (c) => state.dice[c].location === "available"
+  ).length;
 
-  const rows = <T,>(count: number) =>
-    Array.from({ length: count }, (_, i) => i + 1) as T[];
+  const stuck = useMemo(() => {
+    if (phase.kind === "active") {
+      return (
+        availableCount > 0 &&
+        !anyAvailableDieHasMove(state, phase.player, phase.round)
+      );
+    }
+    if (phase.kind === "passive" && !phase.done) {
+      return !anyDiscardedDieHasMove(state, phase.player);
+    }
+    return false;
+  }, [state, phase, availableCount]);
+
+  const canValidate =
+    !!selection && selection.actingColor !== null && selection.picked.length >= 1;
+  const hasSelection = !!selection;
+
+  const showWhiteChooser =
+    !!selection &&
+    selection.color === "white" &&
+    selection.actingColor === null &&
+    actingPlayer !== null;
+
+  const whiteAvailability = useMemo(() => {
+    if (!showWhiteChooser || !selection) return null;
+    const ctx =
+      phase.kind === "active"
+        ? activeContext(state, phase.player, phase.round, "white")
+        : phase.kind === "passive"
+        ? passiveContext(state, phase.player, "white")
+        : null;
+    return ctx ? colorAvailability(selection.value, ctx) : null;
+  }, [showWhiteChooser, selection, state, phase]);
+
+  const onSelectCell = (cellId: string) =>
+    dispatch({ type: "PICK_CELL", cellId });
 
   return (
     <div className="board">
-      <h1 className="board-title">Plateau de dés</h1>
+      <h1 className="board-title">Plateau de dés — Duel à deux joueurs</h1>
 
-      {/* 1. Barre de suivi des tours */}
-      <section className="zone zone-turns" aria-label="Barre de suivi des tours">
-        <h2 className="zone-title">Tours</h2>
-        <div className="turn-bar">
-          {rows<number>(6).map((n) => {
-            const id = `turn-${n}`;
-            return (
-              <CheckboxCell
-                key={id}
-                id={id}
-                label={`Tour ${n}`}
-                number={n}
-                checked={!!checks[id]}
-                onToggle={toggleCheck}
-              />
-            );
-          })}
+      <GameControls
+        globalTurn={state.globalTurn}
+        phase={phase}
+        message={state.message}
+        canValidate={canValidate}
+        hasSelection={hasSelection}
+        stuck={stuck}
+        onValidate={() => dispatch({ type: "VALIDATE_MOVE" })}
+        onCancel={() => dispatch({ type: "CANCEL_SELECTION" })}
+        onEndTurn={() => dispatch({ type: "END_TURN" })}
+        onPass={() => dispatch({ type: "PASS_PASSIVE" })}
+        onContinue={() => dispatch({ type: "CONTINUE" })}
+        onReset={() => dispatch({ type: "RESET" })}
+      />
+
+      {/* Dés communs : disponibles + carré gris + choix du blanc */}
+      <section className="zone shared-dice" aria-label="Dés communs">
+        <div className="shared-dice-row">
+          <DicePool
+            state={state}
+            selectable={isActive}
+            onSelectDie={(color) => dispatch({ type: "SELECT_DIE", color })}
+          />
+          <DiscardSquare
+            state={state}
+            selectable={isPassiveOpen}
+            onSelectDie={(color) => dispatch({ type: "SELECT_DIE", color })}
+          />
         </div>
-      </section>
-
-      {/* Dés (gauche) + Compteurs de bonus (droite) */}
-      <div className="dice-and-bonus">
-        <section className="zone zone-dice" aria-label="Emplacements de dés">
-          <h2 className="zone-title">Dés</h2>
-          <div className="dice-row">
-            {DIE_IDS.map((id, index) => (
-              <DieSlot
-                key={id}
-                id={id}
-                label={DIE_LABELS[index]}
-                state={dice[id]}
-                onValueChange={setDieValue}
-                onColorChange={setDieColor}
-              />
-            ))}
-          </div>
-        </section>
-
-        <section className="zone zone-bonus" aria-label="Compteurs de bonus">
-          <h2 className="zone-title">Compteurs</h2>
-          {["Relance", "Joker", "+1"].map((bar) => (
-            <div className="bonus-bar" key={`bonus-${bar}`}>
-              <span className="bonus-label">Compteur {bar}</span>
-              <div className="bonus-cells">
-                {rows<number>(7).map((pos) => {
-                  const id = `bonus-${bar}-cell-${pos}`;
-                  return (
-                    <CheckboxCell
-                      key={id}
-                      id={id}
-                      label={`Compteur ${bar}, case ${pos}`}
-                      checked={!!checks[id]}
-                      onToggle={toggleCheck}
-                    />
-                  );
-                })}
-              </div>
-            </div>
-          ))}
-        </section>
-      </div>
-
-      {/* Zone jaune (gauche) + Zone turquoise (droite) */}
-      <div className="grids-row">
-        <section className="zone zone-yellow" aria-label="Zone jaune">
-          <h2 className="zone-title"></h2>
-          <div className="grid grid-6col">
-            {rows<number>(3).map((r) =>
-              ROW_NUMBERS.map((num, c) => {
-                const col = c + 1;
-                const id = `yellow-r${r}-c${col}`;
-                return (
-                  <CheckboxCell
-                    key={id}
-                    id={id}
-                    label={`Jaune ligne ${r} colonne ${col}, nombre ${num}`}
-                    number={num}
-                    checked={!!checks[id]}
-                    onToggle={toggleCheck}
-                  />
-                );
-              })
-            )}
-          </div>
-        </section>
-
-        <section className="zone zone-turquoise" aria-label="Zone turquoise">
-          <div className="grid grid-6col">
-            {rows<number>(6).map((r) =>
-              ROW_NUMBERS.map((num, c) => {
-                const col = c + 1;
-                const id = `turquoise-r${r}-c${col}`;
-                return (
-                  <CheckboxCell
-                    key={id}
-                    id={id}
-                    label={`Turquoise ligne ${r} colonne ${col}, nombre ${num}`}
-                    number={num}
-                    checked={!!checks[id]}
-                    onToggle={toggleCheck}
-                  />
-                );
-              })
-            )}
-          </div>
-        </section>
-      </div>
-
-      {/* Pistes empilées : bleu foncé, marron, rose */}
-      <section className="zone zone-blue" aria-label="Piste bleu foncé">
-        <div className="track">
-          {rows<number>(11).map((n) => {
-            const id = `blue-cell-${n}`;
-            if (n === BLUE_CENTER_INDEX) {
-              return (
-                <FixedCell
-                  key={id}
-                  id={id}
-                  label={`Bleu case ${n}, valeur fixe ${BLUE_CENTER_VALUE}`}
-                  value={BLUE_CENTER_VALUE}
-                />
-              );
+        {showWhiteChooser && whiteAvailability && (
+          <WhiteColorChooser
+            availability={whiteAvailability}
+            selected={selection?.actingColor ?? null}
+            onChoose={(actingColor) =>
+              dispatch({ type: "CHOOSE_WHITE_COLOR", actingColor })
             }
-            return (
-              <NumberCell
-                key={id}
-                id={id}
-                label={`Bleu case ${n}`}
-                value={inputs[id] ?? ""}
-                onChange={setInput}
-              />
-            );
-          })}
-        </div>
+          />
+        )}
       </section>
 
-      <section className="zone zone-brown" aria-label="Piste marron">
-        <div className="track">
-          {BROWN_NUMBERS.map((num, i) => {
-            const n = i + 1;
-            const id = `brown-cell-${n}`;
-            return (
-              <CheckboxCell
-                key={id}
-                id={id}
-                label={`Marron case ${n}, nombre ${num}`}
-                number={num}
-                checked={!!checks[id]}
-                onToggle={toggleCheck}
-              />
-            );
-          })}
-        </div>
-      </section>
-
-      <section className="zone zone-pink" aria-label="Piste rose">
-        <div className="track">
-          {rows<number>(12).map((n) => {
-            const id = `pink-cell-${n}`;
-            return (
-              <NumberCell
-                key={id}
-                id={id}
-                label={`Rose case ${n}`}
-                value={inputs[id] ?? ""}
-                onChange={setInput}
-              />
-            );
-          })}
-        </div>
-      </section>
+      {/* Deux plateaux : Joueur 1 à gauche, Joueur 2 à droite */}
+      <div className="boards-row">
+        {PLAYER_IDS.map((playerId) => {
+          const interactive = actingPlayer === playerId;
+          const activeRound =
+            phase.kind === "active" && phase.player === playerId
+              ? phase.round
+              : null;
+          return (
+            <BoardView
+              key={playerId}
+              playerId={playerId}
+              board={state.boards[playerId]}
+              interactive={interactive}
+              legal={interactive ? legalSet : EMPTY_SET}
+              picked={interactive ? pickedSet : EMPTY_SET}
+              activeRound={activeRound}
+              onSelect={onSelectCell}
+            />
+          );
+        })}
+      </div>
     </div>
   );
 }
+
+const EMPTY_SET = new Set<string>();
 
 export default App;

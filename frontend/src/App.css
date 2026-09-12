@@ -15,6 +15,60 @@
   text-align: center;
 }
 
+/* ---- Two-board layout ---- */
+.boards-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  align-items: start;
+}
+
+.board-view {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 2px solid transparent;
+  border-radius: 10px;
+  padding: 6px;
+}
+
+.board-view.is-interactive {
+  border-color: #0b57d0;
+  box-shadow: 0 0 0 2px rgba(11, 87, 208, 0.25);
+}
+
+.board-view-title {
+  margin: 0;
+  font-size: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.acting-badge {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #0b57d0;
+  background: #e8f0fe;
+  border: 1px solid #0b57d0;
+  border-radius: 999px;
+  padding: 1px 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+/* ---- Shared dice area ---- */
+.shared-dice {
+  background: #d6dbe0;
+}
+
+.shared-dice-row {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
 .zone {
   border-radius: 8px;
   padding: 8px 10px;
@@ -57,8 +111,93 @@
   background: #e28bb4;
 }
 
+/* ---- Game controls / status bar ---- */
+.game-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: #2a2f36;
+  color: #ffffff;
+}
+
+.game-status {
+  font-size: 0.9rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.status-turn {
+  font-size: 0.95rem;
+}
+
+.status-acting {
+  font-weight: 700;
+  color: #ffd54f;
+}
+
+.status-over {
+  font-size: 1.05rem;
+  color: #ffd54f;
+}
+
+.game-buttons {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-left: auto;
+}
+
+.btn {
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  background: #4b5563;
+  color: #ffffff;
+  border-radius: 6px;
+  padding: 5px 12px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn:hover {
+  filter: brightness(1.1);
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background: #2e7d32;
+  border-color: #2e7d32;
+}
+
+.btn-warn {
+  background: #b45309;
+  border-color: #b45309;
+}
+
+.btn-reset {
+  background: #7f1d1d;
+  border-color: #7f1d1d;
+}
+
+.game-message {
+  flex-basis: 100%;
+  font-size: 0.85rem;
+  background: #fff3cd;
+  color: #664d03;
+  border-radius: 6px;
+  padding: 6px 10px;
+}
+
 /* ---- Generic cells ---- */
 .checkbox-cell,
+.value-cell,
 .fixed-cell {
   position: relative;
   width: var(--cell-size);
@@ -72,13 +211,22 @@
   color: #1a1a1a;
   font-size: 0.8rem;
   font-weight: 600;
-  cursor: pointer;
   padding: 0;
 }
 
+.checkbox-cell.is-locked,
+.value-cell.is-locked {
+  cursor: default;
+}
+
+.checkbox-cell:not(.is-locked),
+.value-cell:not(.is-locked) {
+  cursor: pointer;
+}
+
 .checkbox-cell:focus-visible,
-.number-cell:focus-visible,
-.die-face:focus-visible {
+.value-cell:focus-visible,
+.die.is-clickable:focus-visible {
   outline: 2px solid #0b57d0;
   outline-offset: 1px;
 }
@@ -86,6 +234,46 @@
 .checkbox-cell.is-checked {
   background: #c8e6c9;
   border-color: #2e7d32;
+}
+
+.value-cell.is-filled {
+  background: #e3f2fd;
+  border-color: #1565c0;
+}
+
+/* Highlighted legal destinations */
+.checkbox-cell.is-highlighted,
+.value-cell.is-highlighted {
+  border-color: #0b57d0;
+  box-shadow: 0 0 0 2px #0b57d0;
+  background: #e8f0fe;
+}
+
+/* Provisional (picked but not yet validated) */
+.checkbox-cell.is-provisional,
+.value-cell.is-provisional {
+  background: #fff59d;
+  border-color: #f9a825;
+  box-shadow: 0 0 0 2px #f9a825;
+}
+
+/* Definitively inaccessible (brown) */
+.checkbox-cell.is-inaccessible {
+  background: #9e9e9e;
+  border-color: #616161;
+  opacity: 0.55;
+}
+
+/* The six passive-yellow cells, distinguished on both boards */
+.checkbox-cell.is-passive-yellow {
+  background: #cfcfcf;
+  border-color: #6b6b6b;
+  border-style: dashed;
+}
+
+.checkbox-cell.is-passive-yellow.is-checked {
+  background: #c8e6c9;
+  border-style: solid;
 }
 
 .cell-number {
@@ -101,22 +289,21 @@
   color: #1b5e20;
 }
 
+.value-cell.is-provisional,
+.checkbox-cell.is-provisional .cell-check {
+  color: #7a5b00;
+}
+
 .fixed-cell {
   cursor: default;
   background: #f5f5f5;
   border-style: dashed;
 }
 
-.number-cell {
-  width: var(--cell-size);
-  height: var(--cell-size);
-  border: 1px solid rgba(0, 0, 0, 0.4);
-  border-radius: 4px;
-  text-align: center;
-  font-size: 0.8rem;
-  background: #ffffff;
-  color: #1a1a1a;
-  padding: 0 2px;
+/* Bonus counters are disabled and have no effect */
+.zone-bonus.is-disabled .checkbox-cell {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 /* ---- Turn bar ---- */
@@ -134,7 +321,13 @@
   align-items: start;
 }
 
-.dice-row {
+.dice-area {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.dice-slots {
   display: flex;
   gap: 12px;
 }
@@ -143,7 +336,12 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
+}
+
+.die-slot.is-active .die-face-empty {
+  border-color: #0b57d0;
+  box-shadow: 0 0 0 2px #0b57d0;
 }
 
 .die-slot-title {
@@ -151,34 +349,147 @@
   font-size: 0.8rem;
 }
 
-.die-face {
-  width: 48px;
-  height: 48px;
-  border: 2px solid rgba(0, 0, 0, 0.5);
+.die-slot-caption {
+  font-size: 0.65rem;
+}
+
+/* ---- Die visual ---- */
+.die {
+  width: 46px;
+  height: 46px;
+  border: 2px solid rgba(0, 0, 0, 0.55);
   border-radius: 8px;
-  background: #ffffff;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.5rem;
+  font-size: 1.4rem;
   font-weight: 800;
+  padding: 0;
 }
 
-.die-controls {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
+.die-small {
+  width: 30px;
+  height: 30px;
+  font-size: 0.95rem;
+  border-radius: 6px;
 }
 
-.die-control {
-  display: flex;
-  align-items: center;
-  gap: 4px;
+.die.is-clickable {
+  cursor: pointer;
+}
+
+.die.is-clickable:hover {
+  filter: brightness(1.08);
+}
+
+.die.is-selected {
+  box-shadow: 0 0 0 3px #0b57d0;
+}
+
+.die.is-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.die-face-empty {
+  width: 46px;
+  height: 46px;
+  border: 2px dashed rgba(0, 0, 0, 0.4);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.5);
+}
+
+/* ---- Dice pool ---- */
+.dice-pool {
+  margin-top: 10px;
+}
+
+.dice-pool-label,
+.discard-label {
+  display: block;
   font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin-bottom: 4px;
 }
 
-.die-control select {
-  font-size: 0.75rem;
+.dice-pool-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-height: 46px;
+  align-items: center;
+}
+
+.dice-pool-empty {
+  font-size: 0.8rem;
+  font-style: italic;
+}
+
+/* ---- Discard (gray) square ---- */
+.discard-square {
+  background: #9e9e9e;
+  border: 2px solid #616161;
+  border-radius: 8px;
+  padding: 6px;
+  min-width: 84px;
+  min-height: 84px;
+}
+
+.discard-square.is-selectable {
+  box-shadow: 0 0 0 3px #0b57d0;
+}
+
+.discard-cells {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-height: 30px;
+}
+
+/* ---- White color chooser ---- */
+.white-chooser {
+  margin-top: 10px;
+  padding: 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.white-chooser-label {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.white-chooser-options {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.white-chooser-option {
+  border: 2px solid rgba(0, 0, 0, 0.5);
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.white-chooser-option.is-selected {
+  box-shadow: 0 0 0 3px #0b57d0;
+}
+
+.white-chooser-option:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.white-chooser-na {
+  font-size: 0.65rem;
+  font-weight: 400;
 }
 
 /* ---- Bonus counters ---- */
@@ -225,16 +536,18 @@
   flex-wrap: wrap;
 }
 
-/* ---- Responsive: mobile ---- */
-@media (max-width: 760px) {
+/* ---- Responsive: small screens ---- */
+@media (max-width: 900px) {
   .board {
-    --cell-size: 34px;
+    --cell-size: 30px;
   }
-  .dice-and-bonus,
-  .grids-row {
+  .boards-row {
     grid-template-columns: 1fr;
   }
   .bonus-label {
     min-width: 70px;
+  }
+  .game-buttons {
+    margin-left: 0;
   }
 }

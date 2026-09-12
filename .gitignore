@@ -1,1 +1,4 @@
 brouillon
+frontend/node_modules
+.gitignore
+frontend/dist

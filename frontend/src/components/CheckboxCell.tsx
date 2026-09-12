@@ -2,17 +2,49 @@ interface CheckboxCellProps {
   id: string;
   label: string;
   checked: boolean;
-  onToggle: (id: string) => void;
   /** Optional pre-printed fixed number; stays visible and cannot be changed. */
   number?: number;
+  /** Legal destination for the current selection (highlighted, clickable). */
+  highlighted?: boolean;
+  /** Provisionally picked as part of the current selection. */
+  provisional?: boolean;
+  /** Definitively inaccessible (e.g. brown cells to the left of the last check). */
+  inaccessible?: boolean;
+  /** Marks one of the six passive-yellow cells (grayed background on both boards). */
+  passiveYellow?: boolean;
+  /** Called when the cell is clicked as a legal destination. */
+  onSelect?: (id: string) => void;
 }
 
 /**
- * A checkbox cell: one click checks it, another unchecks it.
- * If it carries a number, the number stays visible and unmodifiable.
- * A visible check mark is shown when checked, without hiding the number.
+ * A board checkbox cell. Once checked it stays checked (board is game-driven and
+ * locked). A number, when present, stays visible under the check mark. Clicks only
+ * do something when the cell is a highlighted legal destination.
  */
-function CheckboxCell({ id, label, checked, onToggle, number }: CheckboxCellProps) {
+function CheckboxCell({
+  id,
+  label,
+  checked,
+  number,
+  highlighted = false,
+  provisional = false,
+  inaccessible = false,
+  passiveYellow = false,
+  onSelect,
+}: CheckboxCellProps) {
+  const clickable = highlighted && !!onSelect;
+  const className = [
+    "checkbox-cell",
+    checked ? "is-checked" : "",
+    highlighted ? "is-highlighted" : "",
+    provisional ? "is-provisional" : "",
+    inaccessible ? "is-inaccessible" : "",
+    passiveYellow ? "is-passive-yellow" : "",
+    clickable ? "" : "is-locked",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
   return (
     <button
       id={id}
@@ -20,11 +52,12 @@ function CheckboxCell({ id, label, checked, onToggle, number }: CheckboxCellProp
       role="checkbox"
       aria-checked={checked}
       aria-label={label}
-      className={`checkbox-cell${checked ? " is-checked" : ""}`}
-      onClick={() => onToggle(id)}
+      aria-disabled={!clickable}
+      className={className}
+      onClick={clickable ? () => onSelect(id) : undefined}
     >
       {number !== undefined && <span className="cell-number">{number}</span>}
-      {checked && (
+      {(checked || provisional) && (
         <span className="cell-check" aria-hidden="true">
           ✓
         </span>
