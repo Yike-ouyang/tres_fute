@@ -1,6 +1,9 @@
 import { gameReducer } from "./reducer";
+import { FOX_SLOT_IDS } from "./bonuses";
+import { computeScore } from "./score";
 import {
   ALL_DIE_COLORS,
+  PLAYER_IDS,
   type DieColor,
   type GameAction,
   type GameState,
@@ -66,6 +69,8 @@ function phaseText(phase: Phase): string {
       return `active(J${phase.player}, manche ${phase.round})`;
     case "passive":
       return `passive(J${phase.player}, ${phase.done ? "terminé" : "en cours"})`;
+    case "plus1":
+      return `+1(J${phase.order[phase.current]}, ${phase.current + 1}/${phase.order.length})`;
     case "game-over":
       return "game-over";
   }
@@ -74,7 +79,20 @@ function phaseText(phase: Phase): string {
 function actingPlayerOf(phase: Phase): number | null {
   if (phase.kind === "active") return phase.player;
   if (phase.kind === "passive" && !phase.done) return phase.player;
+  if (phase.kind === "plus1") return phase.order[phase.current];
   return null;
+}
+
+/** Newly-unlocked bonus slot ids per player between two states. */
+function unlockDiff(before: GameState, after: GameState) {
+  const out: { player: number; slots: string[] }[] = [];
+  for (const p of PLAYER_IDS) {
+    const b = before.boards[p].bonuses.slotsUnlocked;
+    const a = after.boards[p].bonuses.slotsUnlocked;
+    const slots = Object.keys(a).filter((id) => a[id] && !b[id]);
+    if (slots.length > 0) out.push({ player: p, slots });
+  }
+  return out;
 }
 
 /** Compact, readable summary of the game state for logging. */
@@ -94,11 +112,36 @@ function summarize(state: GameState) {
           maxPick: state.selection.maxPick,
         }
       : null,
+    plus1Active: state.plus1Active,
+    jokerPending: state.jokerPending,
     dice: ALL_DIE_COLORS.map((c) => ({
       color: c,
       value: state.dice[c].value,
+      jokerValue: state.dice[c].jokerValue ?? null,
       location: state.dice[c].location,
     })),
+    pendingBonuses: state.pendingBonuses,
+    bonusResolution: state.bonusResolution,
+    pinkChoice: state.pinkChoice
+      ? {
+          owner: state.pinkChoice.owner,
+          cellId: state.pinkChoice.cellId,
+          position: state.pinkChoice.position,
+          effectiveValue: state.pinkChoice.effectiveValue,
+          multiplier: state.pinkChoice.multiplier,
+          bonusEffect: state.pinkChoice.bonusEffect,
+        }
+      : null,
+    pendingAdvance: state.pendingAdvance,
+    bonuses: PLAYER_IDS.map((p) => {
+      const bs = state.boards[p].bonuses;
+      return {
+        player: p,
+        relance: bs.relance,
+        joker: bs.joker,
+        plus1: bs.plus1,
+      };
+    }),
   });
 }
 
@@ -243,7 +286,8 @@ function logDetails(action: GameAction, before: GameState, after: GameState) {
 
     case "END_TURN":
     case "PASS_PASSIVE":
-    case "CONTINUE": {
+    case "CONTINUE":
+    case "PLUS1_SKIP": {
       console.log(`${PREFIX} déplacement des dés`, diceMovements(before, after));
       console.log(`${PREFIX} transition`, {
         avant: phaseText(before.phase),
@@ -254,9 +298,147 @@ function logDetails(action: GameAction, before: GameState, after: GameState) {
       break;
     }
 
+    case "USE_RELANCE": {
+      const applied = before !== after;
+      console.log(`${PREFIX} relance`, {
+        appliquee: applied,
+        raison: applied ? undefined : "aucune relance disponible ou hors phase active",
+      });
+      if (applied) {
+        console.log(`${PREFIX} nouveaux dés`, diceMovements(before, after));
+      }
+      break;
+    }
+
+    case "START_JOKER": {
+      console.log(`${PREFIX} joker démarré`, {
+        accepte: before !== after,
+        pending: after.jokerPending,
+        message: after.message,
+      });
+      break;
+    }
+
+    case "SET_JOKER_VALUE": {
+      console.log(`${PREFIX} valeur du joker`, {
+        valeur: action.value,
+        pending: after.jokerPending,
+      });
+      break;
+    }
+
+    case "CANCEL_JOKER":
+      console.log(`${PREFIX} joker annulé`);
+      break;
+
+    case "PLUS1_USE": {
+      console.log(`${PREFIX} +1 : début de replay`, {
+        accepte: before !== after,
+        joueur: after.plus1Active,
+      });
+      break;
+    }
+
+    case "BONUS_CHOOSE_COLOR":
+      console.log(`${PREFIX} bonus noir : couleur choisie`, {
+        couleur: action.color,
+        resolution: after.bonusResolution,
+      });
+      break;
+
+    case "BONUS_CHOOSE_VALUE":
+      console.log(`${PREFIX} bonus : valeur choisie`, {
+        valeur: action.value,
+        resolution: after.bonusResolution,
+        dialogueRose: after.pinkChoice ? "ouvert" : null,
+      });
+      break;
+
+    case "BONUS_PLACE_BLUE":
+      console.log(`${PREFIX} bonus bleu foncé : case remplie`, {
+        caseId: action.cellId,
+        valeur: action.value,
+      });
+      break;
+
+    case "BONUS_NOMOVE_DONE":
+      console.log(`${PREFIX} bonus sans coup possible : résolution terminée`, {
+        avant: before.bonusResolution,
+      });
+      break;
+
+    case "PINK_CHOOSE": {
+      const c = before.pinkChoice;
+      const applied = before !== after;
+      console.log(`${PREFIX} case rose : option choisie`, {
+        option: action.option,
+        position: c?.position,
+        valeurEffective: c?.effectiveValue,
+        multiplicateur: c?.multiplier,
+        valeurInscrite:
+          c == null
+            ? null
+            : action.option === "points"
+            ? c.effectiveValue * c.multiplier
+            : Math.ceil(c.effectiveValue / 2),
+        bonusAccorde: action.option === "bonus" ? c?.bonusEffect : null,
+        applique: applied,
+      });
+      break;
+    }
+
+    case "PINK_CANCEL":
+      console.log(`${PREFIX} case rose : choix annulé (rien consommé)`);
+      break;
+
     case "RESET":
       console.log(`${PREFIX} partie réinitialisée`);
       break;
+  }
+
+  const unlocks = unlockDiff(before, after);
+  if (unlocks.length > 0) {
+    console.log(`${PREFIX} bonus débloqués`, unlocks);
+    const foxes = unlocks
+      .map((u) => ({
+        player: u.player,
+        slots: u.slots.filter((id) => (FOX_SLOT_IDS as readonly string[]).includes(id)),
+      }))
+      .filter((u) => u.slots.length > 0);
+    if (foxes.length > 0) {
+      console.log(`${PREFIX} renard débloqué`, foxes);
+    }
+  }
+
+  if (before.phase.kind !== "game-over" && after.phase.kind === "game-over") {
+    console.log(`${PREFIX} scores finaux`, {
+      joueur1: computeScore(after.boards[1]),
+      joueur2: computeScore(after.boards[2]),
+    });
+  }
+
+  // Immediate colored-bonus queue and resolution flow.
+  if (after.pendingBonuses.length > before.pendingBonuses.length) {
+    console.log(`${PREFIX} bonus immédiats en file`, {
+      file: after.pendingBonuses,
+    });
+  }
+  if (before.bonusResolution?.owner !== after.bonusResolution?.owner ||
+      before.bonusResolution?.color !== after.bonusResolution?.color ||
+      before.bonusResolution?.stage !== after.bonusResolution?.stage) {
+    if (after.bonusResolution) {
+      console.log(`${PREFIX} résolution de bonus`, after.bonusResolution);
+    } else if (before.bonusResolution) {
+      console.log(`${PREFIX} bonus résolu`, { avant: before.bonusResolution });
+    }
+  }
+  if (!before.pinkChoice && after.pinkChoice) {
+    console.log(`${PREFIX} choix rose ouvert`, {
+      position: after.pinkChoice.position,
+      valeurEffective: after.pinkChoice.effectiveValue,
+      multiplicateur: after.pinkChoice.multiplier,
+      bonus: after.pinkChoice.bonusEffect,
+    });
   }
 }
 

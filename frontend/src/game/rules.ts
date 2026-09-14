@@ -2,6 +2,7 @@ import { BROWN_NUMBERS } from "../boardData";
 import {
   ACTING_COLORS,
   ALL_DIE_COLORS,
+  effectiveValue,
   type ActingColor,
   type DieColor,
   type DieRuntime,
@@ -32,9 +33,9 @@ export interface MoveContext {
   selectedColor: DieColor;
 }
 
-const TURQUOISE_ROWS = [1, 2, 3, 4, 5, 6];
-const BLUE_RIGHT = [7, 8, 9, 10, 11];
-const BLUE_LEFT = [5, 4, 3, 2, 1];
+const TURQUOISE_ROWS = [1, 2, 3, 4, 5];
+const BLUE_RIGHT = [8, 9, 10, 11, 12, 13];
+const BLUE_LEFT = [6, 5, 4, 3, 2, 1];
 
 /** Passive-yellow destination per die value: manche is irrelevant. */
 const PASSIVE_YELLOW_CELL: Record<number, string> = {
@@ -49,9 +50,9 @@ const PASSIVE_YELLOW_CELL: Record<number, string> = {
 /** The six cells reachable by a passive yellow die (for styling on both boards). */
 export const PASSIVE_YELLOW_CELLS: string[] = Object.values(PASSIVE_YELLOW_CELL);
 
-/** The blue sum is always darkblue value + white value, wherever those dice are. */
+/** The blue sum is always darkblue + white (effective values, so jokers count). */
 export function blueSum(dice: Record<DieColor, DieRuntime>): number {
-  return dice.darkblue.value + dice.white.value;
+  return effectiveValue(dice.darkblue) + effectiveValue(dice.white);
 }
 
 interface BranchInfo {
@@ -129,7 +130,7 @@ export function legalDestinations(
           (c) =>
             c !== ctx.selectedColor &&
             ctx.dice[c].location === "discarded" &&
-            ctx.dice[c].value === value
+            effectiveValue(ctx.dice[c]) === value
         ).length;
       } else {
         sameValue = board.chosenThisTurn.filter((d) => d.value === value).length;
@@ -163,9 +164,79 @@ export function legalDestinations(
   }
 }
 
-/** The value written for a pink move. */
+/** The value written for a pink move when taking the bonus (half, rounded up). */
 export function pinkValue(dieValue: number): number {
   return Math.ceil(dieValue / 2);
+}
+
+/** The value written for a pink move when taking the points (value x multiplier). */
+export function pinkPoints(effectiveValue: number, multiplier: number): number {
+  return effectiveValue * multiplier;
+}
+
+// ---- Immediate colored bonus-die placement helpers ----
+
+/** Yellow bonus die: any unchecked yellow cell in the die's column (free row). */
+export function bonusYellowLegal(board: PlayerBoard, value: number): string[] {
+  const legal: string[] = [];
+  for (let r = 1; r <= 3; r++) {
+    const id = `yellow-r${r}-c${value}`;
+    if (!board.checks[id]) legal.push(id);
+  }
+  return legal;
+}
+
+/** Turquoise bonus die: check any one unchecked turquoise cell. */
+export function allUncheckedTurquoise(board: PlayerBoard): string[] {
+  const legal: string[] = [];
+  for (const r of TURQUOISE_ROWS) {
+    for (let c = 1; c <= 6; c++) {
+      const id = `turquoise-r${r}-c${c}`;
+      if (!board.checks[id]) legal.push(id);
+    }
+  }
+  return legal;
+}
+
+/** Brown bonus die: a legal brown cell of the chosen number, respecting progression. */
+export function bonusBrownLegal(board: PlayerBoard, value: number): string[] {
+  const start = board.brownLastChecked ?? 0;
+  const legal: string[] = [];
+  for (let i = 0; i < BROWN_NUMBERS.length; i++) {
+    const n = i + 1;
+    if (n <= start) continue;
+    const id = `brown-cell-${n}`;
+    if (BROWN_NUMBERS[i] === value && !board.checks[id]) legal.push(id);
+  }
+  return legal;
+}
+
+/** A single dark-blue bonus option: which cell to fill and the value to write. */
+export interface BlueBonusOption {
+  cellId: string;
+  value: number;
+}
+
+/**
+ * Dark-blue bonus die: write a regulation value into the next-free cell of either
+ * branch. Each open branch accepts its stepped value (ref-1 left / ref+1 right)
+ * and the wildcard 7.
+ */
+export function blueBonusOptions(board: PlayerBoard): BlueBonusOption[] {
+  const values = board.values;
+  const options: BlueBonusOption[] = [];
+  const push = (cellId: string | null, value: number) => {
+    if (!cellId || value < 1) return;
+    if (options.some((o) => o.cellId === cellId && o.value === value)) return;
+    options.push({ cellId, value });
+  };
+  const left = branchInfo(values, BLUE_LEFT);
+  push(left.nextFree, left.ref - 1);
+  push(left.nextFree, 7);
+  const right = branchInfo(values, BLUE_RIGHT);
+  push(right.nextFree, right.ref + 1);
+  push(right.nextFree, 7);
+  return options;
 }
 
 /** Availability of each acting color for a die's value in the given context. */

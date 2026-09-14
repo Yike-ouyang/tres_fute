@@ -12,6 +12,8 @@ interface CheckboxCellProps {
   inaccessible?: boolean;
   /** Marks one of the six passive-yellow cells (grayed background on both boards). */
   passiveYellow?: boolean;
+  /** Marks a dark turquoise cell (part of the triangle used for bonus unlocks). */
+  dark?: boolean;
   /** Called when the cell is clicked as a legal destination. */
   onSelect?: (id: string) => void;
 }
@@ -30,6 +32,7 @@ function CheckboxCell({
   provisional = false,
   inaccessible = false,
   passiveYellow = false,
+  dark = false,
   onSelect,
 }: CheckboxCellProps) {
   const clickable = highlighted && !!onSelect;
@@ -40,6 +43,7 @@ function CheckboxCell({
     provisional ? "is-provisional" : "",
     inaccessible ? "is-inaccessible" : "",
     passiveYellow ? "is-passive-yellow" : "",
+    dark ? "is-turquoise-dark" : "",
     clickable ? "" : "is-locked",
   ]
     .filter(Boolean)

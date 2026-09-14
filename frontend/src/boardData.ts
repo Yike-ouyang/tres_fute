@@ -27,11 +27,20 @@ export const DIE_VALUES = [1, 2, 3, 4, 5, 6] as const;
 /** Fixed numbers printed on every yellow / turquoise row, left to right. */
 export const ROW_NUMBERS = [1, 2, 3, 4, 5, 6] as const;
 
+/** Number of rows in the yellow zone. */
+export const YELLOW_ROWS = 3;
+/** Number of rows in the turquoise zone (corrected to 5). */
+export const TURQUOISE_ROWS = 5;
+
 /** Fixed numbers printed on the brown track, left to right. */
 export const BROWN_NUMBERS = [1, 5, 3, 4, 2, 6, 4, 5, 2, 1, 6, 3] as const;
 
-/** Center cell of the blue track (fixed, non-editable). */
-export const BLUE_CENTER_INDEX = 6;
+/** Number of pink cells. */
+export const PINK_CELLS = 12;
+
+/** Blue track: 6 cells + central 7 + 6 cells = 13 cells, center at position 7. */
+export const BLUE_CELL_COUNT = 13;
+export const BLUE_CENTER_INDEX = 7;
 export const BLUE_CENTER_VALUE = 7;
 
 export interface DieState {

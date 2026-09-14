@@ -1,6 +1,9 @@
 .board {
   --cell-size: 30px;
   --gap: 6px;
+  /* Width of a bonus band (bonus row/column) and of the brown between-cells gap. */
+  --bonus-band: 24px;
+  --gap-band: 26px;
   max-width: 1100px;
   margin: 0 auto;
   padding: 12px;
@@ -109,6 +112,64 @@
 }
 .zone-pink {
   background: #e28bb4;
+}
+
+/* ---- Immediate bonus resolution + pink choice overlays ---- */
+.bonus-resolution,
+.pink-choice {
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #fff8e1;
+  border: 2px solid #f9a825;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.bonus-resolution-title,
+.pink-choice-head strong {
+  font-weight: 800;
+  font-size: 0.9rem;
+}
+
+.bonus-resolution-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.bonus-resolution-label {
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.bonus-resolution-options {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.bonus-color-option {
+  border: 2px solid rgba(0, 0, 0, 0.5);
+  border-radius: 6px;
+  padding: 5px 10px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.pink-choice-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 0.82rem;
+}
+
+.pink-choice-options {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 /* ---- Game controls / status bar ---- */
@@ -306,11 +367,15 @@
   cursor: not-allowed;
 }
 
-/* ---- Turn bar ---- */
-.turn-bar {
-  display: flex;
+/* ---- Turn tracking: bonus directly under each turn number ---- */
+.turn-grid {
+  display: grid;
+  grid-template-columns: repeat(6, var(--cell-size));
+  grid-template-rows: var(--cell-size) var(--bonus-band);
   gap: var(--gap);
-  flex-wrap: wrap;
+  justify-items: center;
+  align-items: center;
+  width: max-content;
 }
 
 /* ---- Dice + bonus row ---- */
@@ -492,21 +557,299 @@
   font-weight: 400;
 }
 
-/* ---- Bonus counters ---- */
-.bonus-bar {
+/* ---- Small button variant ---- */
+.btn-small {
+  padding: 3px 8px;
+  font-size: 0.72rem;
+}
+
+/* ---- Inline bonus slots ---- */
+.bonus-slot {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  border: 1px solid rgba(0, 0, 0, 0.35);
+  background: rgba(255, 255, 255, 0.85);
+  color: #1a1a1a;
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.bonus-slot.is-empty {
+  opacity: 0.4;
+}
+
+.bonus-slot.is-unlocked {
+  outline: 2px solid #16a34a;
+  outline-offset: 1px;
+  box-shadow: 0 0 0 2px rgba(22, 163, 74, 0.3);
+}
+
+.bonus-slot-fox {
+  font-size: 0.85rem;
+  background: #fff3e0;
+}
+
+.bonus-slot-fox.is-locked-fox {
+  filter: grayscale(1);
+  opacity: 0.55;
+}
+
+.bonus-slot-check {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: #16a34a;
+  color: #ffffff;
+  font-size: 0.6rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.bonus-slot-glyph {
+  pointer-events: none;
+}
+
+/* Invisible placeholder keeping an "Aucun" position in the grid. */
+.bonus-slot-spacer {
+  display: inline-block;
+  width: 22px;
+  height: 22px;
+  pointer-events: none;
+}
+
+/* Turquoise dark cells forming the unlock triangle */
+.checkbox-cell.is-turquoise-dark {
+  background: #17726d;
+  color: #ffffff;
+}
+.checkbox-cell.is-turquoise-dark .cell-number {
+  color: #ffffff;
+}
+
+/* ---- Yellow zone: cells and between-line bonuses share 6 columns ---- */
+.yellow-grid {
+  display: grid;
+  grid-template-columns: repeat(6, var(--cell-size));
+  gap: var(--gap);
+  justify-items: center;
+  align-items: center;
+  width: max-content;
+}
+
+/* ---- Turquoise zone: 6 cell columns + a 7th column for row bonuses ---- */
+.turquoise-grid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+  width: max-content;
+}
+.turquoise-grid-row-group {
+  display: grid;
+  grid-template-columns: repeat(6, var(--cell-size)) var(--bonus-band);
+  gap: var(--gap);
+  justify-items: center;
+  align-items: center;
+}
+
+/* ---- Wide tracks: scroll cells and their bonuses together on small screens ---- */
+.track-scroll {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+/* ---- Blue track: bonus directly under each of the 13 positions ---- */
+.blue-grid {
+  display: grid;
+  grid-template-columns: repeat(13, var(--cell-size));
+  grid-template-rows: var(--cell-size) var(--bonus-band);
+  gap: var(--gap);
+  justify-items: center;
+  align-items: center;
+  width: max-content;
+}
+
+/* ---- Brown track: bonuses centered in the gaps between the 12 cells ---- */
+.brown-grid {
+  display: grid;
+  grid-template-columns: var(--cell-size) repeat(11, var(--gap-band) var(--cell-size));
+  gap: 0;
+  justify-items: center;
+  align-items: center;
+  width: max-content;
+}
+
+/* ---- Pink track: multiplier above, cell, bonus below (shared 12 columns) ---- */
+.pink-grid {
+  display: grid;
+  grid-template-columns: repeat(12, var(--cell-size));
+  grid-template-rows: var(--bonus-band) var(--cell-size) var(--bonus-band);
+  gap: var(--gap);
+  justify-items: center;
+  align-items: center;
+  width: max-content;
+}
+
+.pink-mult {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--cell-size);
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #5c2743;
+}
+
+/* ---- Bonus panel (counters + bonus dice) ---- */
+.bonus-counters {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.bonus-counter {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 5px;
+  flex-wrap: wrap;
 }
 
-.bonus-label {
-  min-width: 82px;
-  font-size: 0.75rem;
-  font-weight: 600;
+.bonus-counter-label {
+  min-width: 78px;
+  font-size: 0.78rem;
+  font-weight: 700;
 }
 
-.bonus-cells {
+.bonus-counter-tally {
+  font-size: 0.72rem;
+  opacity: 0.85;
+}
+
+.bonus-counter-hint {
+  font-size: 0.68rem;
+  font-style: italic;
+  opacity: 0.7;
+}
+
+.bonus-counter-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Relance shown as a circle token */
+.relance-token {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.5);
+  background: #ffffff;
+  font-size: 0.7rem;
+  line-height: 1;
+}
+
+/* Counter tracks (joker / +1) */
+.counter-track {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.counter-slot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  border: 1px solid rgba(0, 0, 0, 0.35);
+  background: rgba(255, 255, 255, 0.65);
+  font-size: 0.62rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.counter-slot.is-filled {
+  background: #c8e6c9;
+  border-color: #2e7d32;
+}
+
+/* Reward attached to the right end of a counter track (not a track slot) */
+.counter-reward {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  margin-left: 6px;
+  border-radius: 5px;
+  border: 1px dashed rgba(0, 0, 0, 0.6);
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.counter-reward.is-unlocked {
+  border-style: solid;
+  outline: 2px solid #16a34a;
+  outline-offset: 1px;
+}
+
+.counter-reward-glyph {
+  pointer-events: none;
+}
+
+.bonus-dice-tally {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.bonus-die-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 7px;
+  border-radius: 10px;
+  border: 1px solid rgba(0, 0, 0, 0.3);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+/* ---- Joker value chooser + +1 picker ---- */
+.joker-value-chooser,
+.plus1-picker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+  padding: 8px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.joker-value-label,
+.plus1-picker-label {
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.plus1-picker-row {
   display: flex;
   gap: var(--gap);
   flex-wrap: wrap;
@@ -529,6 +872,54 @@
   grid-template-columns: repeat(6, var(--cell-size));
 }
 
+/* ---- End-of-game score table ---- */
+.score-table {
+  border-radius: 8px;
+  padding: 12px 14px;
+  background: #f5f7fa;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+}
+
+.score-table-title {
+  margin: 0 0 4px;
+  font-size: 1.1rem;
+}
+
+.score-table-winner {
+  margin: 0 0 10px;
+  font-weight: 800;
+  font-size: 0.95rem;
+}
+
+.score-table table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.score-table th,
+.score-table td {
+  padding: 4px 8px;
+  text-align: right;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.score-table th[scope="row"],
+.score-table thead th:first-child {
+  text-align: left;
+}
+
+.score-table .is-winner {
+  background: #e8f5e9;
+  font-weight: 700;
+}
+
+.score-table tr.is-total td,
+.score-table tr.is-total th {
+  font-weight: 800;
+  border-top: 2px solid rgba(0, 0, 0, 0.25);
+}
+
 /* ---- Tracks (blue / brown / pink) ---- */
 .track {
   display: flex;
@@ -539,13 +930,16 @@
 /* ---- Responsive: small screens ---- */
 @media (max-width: 900px) {
   .board {
-    --cell-size: 30px;
+    --cell-size: 28px;
+    --gap: 4px;
+    --bonus-band: 22px;
+    --gap-band: 24px;
   }
   .boards-row {
     grid-template-columns: 1fr;
   }
-  .bonus-label {
-    min-width: 70px;
+  .bonus-counter-label {
+    min-width: 64px;
   }
   .game-buttons {
     margin-left: 0;
