@@ -28,7 +28,9 @@ function bonusLabel(effect: BonusEffect): string {
 
 /**
  * The points-vs-bonus choice shown for every pink inscription except the first
- * cell. Nothing is written or consumed until an option is confirmed.
+ * cell. Cell 1 never opens this panel: it is written as ceil(effectiveValue / 2)
+ * with no multiplier choice and no bonus. Nothing is written or consumed until
+ * an option is confirmed.
  */
 function PinkChoiceDialog({ choice, onChoose, onCancel }: PinkChoiceDialogProps) {
   const points = choice.effectiveValue * choice.multiplier;

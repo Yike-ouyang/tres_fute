@@ -1,5 +1,5 @@
 import { DIE_COLOR_OPTIONS } from "../boardData";
-import { NUMBERED_JOKERS, TOTAL_PLUS1, jokerTokenLabel } from "../game/bonuses";
+import { TOTAL_JOKERS, TOTAL_PLUS1, TOTAL_RELANCE, jokerTokenLabel } from "../game/bonuses";
 import { type BonusDieColor, type PlayerBoard } from "../game/types";
 
 interface BonusPanelProps {
@@ -20,8 +20,6 @@ const DIE_FG: Record<string, string> = {
   ...Object.fromEntries(DIE_COLOR_OPTIONS.map((o) => [o.value, o.text])),
   black: "#ffffff",
 };
-/** Number of joker counter slots (3,4,5,6 then two wilds). */
-const JOKER_SLOTS = NUMBERED_JOKERS + 2;
 
 function remaining(t: { unlocked: number; used: number }): number {
   return Math.max(0, t.unlocked - t.used);
@@ -54,6 +52,23 @@ function CounterReward({
   );
 }
 
+function FoxReward({ unlocked }: { unlocked: boolean }) {
+  return (
+    <span
+      className={`counter-reward counter-reward-fox${unlocked ? " is-unlocked" : " is-locked-fox"}`}
+      title={`Renard (toutes les relances)${unlocked ? " (débloqué)" : ""}`}
+      aria-label={`Renard, toutes les relances${unlocked ? ", débloqué" : ""}`}
+    >
+      <span className="counter-reward-glyph">🦊</span>
+      {unlocked && (
+        <span className="bonus-slot-check" aria-hidden="true">
+          ✓
+        </span>
+      )}
+    </span>
+  );
+}
+
 /** Bonus counters (relance / joker / +1), bonus-die tallies and active controls. */
 function BonusPanel({ board, activeOwner, jokerPending, onRelance, onJoker }: BonusPanelProps) {
   const b = board.bonuses;
@@ -62,6 +77,7 @@ function BonusPanel({ board, activeOwner, jokerPending, onRelance, onJoker }: Bo
   const plus1Left = remaining(b.plus1);
   const nextJoker = jokerTokenLabel(b.joker.used);
 
+  const relanceRewardUnlocked = !!b.slotsUnlocked["counter-relance-all"];
   const jokerRewardUnlocked = !!b.slotsUnlocked["counter-joker-all"];
   const plus1RewardUnlocked = !!b.slotsUnlocked["counter-plus1-all"];
 
@@ -70,17 +86,23 @@ function BonusPanel({ board, activeOwner, jokerPending, onRelance, onJoker }: Bo
       <h3 className="zone-title">Bonus</h3>
 
       <div className="bonus-counters">
-        {/* Relance : représenté par un cercle */}
         <div className="bonus-counter">
-          <span className="bonus-counter-label">
-            <span className="relance-token" aria-hidden="true">
-              ↻
-            </span>
-            Relance
-          </span>
-          <span className="bonus-counter-tally">
-            {relanceLeft} dispo. / {b.relance.unlocked} débloqué(s)
-          </span>
+          <span className="bonus-counter-label">Relance</span>
+          <div className="counter-track" aria-label="Compteur de relances">
+            {Array.from({ length: TOTAL_RELANCE }, (_, i) => {
+              const filled = i < b.relance.unlocked;
+              return (
+                <span
+                  key={i}
+                  className={`counter-slot counter-slot-relance${filled ? " is-filled" : ""}`}
+                  title={`Relance${filled ? " (débloqué)" : ""}`}
+                >
+                  ↻
+                </span>
+              );
+            })}
+            <FoxReward unlocked={relanceRewardUnlocked} />
+          </div>
           <button
             type="button"
             className="btn btn-small"
@@ -91,11 +113,10 @@ function BonusPanel({ board, activeOwner, jokerPending, onRelance, onJoker }: Bo
           </button>
         </div>
 
-        {/* Joker chiffre : piste de dés 3,4,5,6,?,? + récompense marron à droite */}
         <div className="bonus-counter">
           <span className="bonus-counter-label">Joker</span>
           <div className="counter-track" aria-label="Compteur de jokers">
-            {Array.from({ length: JOKER_SLOTS }, (_, i) => {
+            {Array.from({ length: TOTAL_JOKERS }, (_, i) => {
               const filled = i < b.joker.unlocked;
               return (
                 <span
@@ -123,7 +144,6 @@ function BonusPanel({ board, activeOwner, jokerPending, onRelance, onJoker }: Bo
           </button>
         </div>
 
-        {/* +1 : piste de +1 + récompense rose à droite */}
         <div className="bonus-counter">
           <span className="bonus-counter-label">+1</span>
           <div className="counter-track" aria-label="Compteur de +1">

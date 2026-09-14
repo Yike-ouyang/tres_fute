@@ -2,6 +2,7 @@ import {
   type BonusDieColor,
   type BonusEffect,
   type BonusState,
+  type CumulativeBonus,
   type PlayerBoard,
 } from "./types";
 
@@ -13,19 +14,20 @@ const none: BonusEffect = { kind: "none" };
 const fox: BonusEffect = { kind: "fox" };
 const die = (color: BonusDieColor): BonusEffect => ({ kind: "die", color });
 
-/** Stable slot ids for the five fox bonuses (unprefixed; DOM uses p1-/p2-). */
+/** Stable slot ids for the six fox bonuses (unprefixed; DOM uses p1-/p2-). */
 export const FOX_SLOT_IDS = [
   "gold-r1-c6",
   "turqRow-1",
   "blue-13",
   "brownGap-11-12",
   "pink-9",
+  "counter-relance-all",
 ] as const;
 
 /** Joker token value by unlock order: first four are 3,4,5,6, the rest are wild (null). */
 export function jokerTokenValue(index: number): number | null {
   const numbered = [3, 4, 5, 6];
-  return index < numbered.length ? numbered[index] : null;
+  return index < NUMBERED_JOKERS ? numbered[index] : null;
 }
 
 export function jokerTokenLabel(index: number): string {
@@ -101,8 +103,8 @@ const TURN_BONUS: Record<number, BonusEffect> = {
   4: die("black"),
 };
 
-// Pink line (deferred): multipliers and bonuses, displayed but inert in Phase 1.
-export const PINK_MULTIPLIERS = [0.5, 1, 2, 2, 1, 2, 2, 1, 3, 2, 2, 3];
+// Pink line: cell 1 has no displayed multiplier (automatic ceil(v/2) write).
+export const PINK_MULTIPLIERS = [0, 1, 2, 2, 1, 2, 2, 1, 3, 2, 2, 3];
 export const PINK_BONUSES: BonusEffect[] = [
   none,
   relance,
@@ -212,12 +214,12 @@ function turnSlots(): SlotDef[] {
   });
 }
 
-/** Total number of numbered jokers (used for the "all jokers" completion). */
+/** Numbered joker tokens (3,4,5,6); remaining track slots are wild. */
 export const NUMBERED_JOKERS = 4;
+export const WILD_JOKERS = 3;
 
-/** Total plus1 slots across non-pink sources (Phase 1) for the "all +1" completion. */
-export const TOTAL_PLUS1 = (() => {
-  const all = [
+function allCatalogEffects(): BonusEffect[] {
+  return [
     ...GOLD_ROW1,
     ...GOLD_ROW2,
     ...TURQ_ROW,
@@ -225,18 +227,34 @@ export const TOTAL_PLUS1 = (() => {
     ...Object.values(BLUE_BONUS),
     ...BROWN_GAPS.map((g) => g.effect),
     ...Object.values(TURN_BONUS),
+    ...PINK_BONUSES,
   ];
-  return all.filter((e) => e.kind === "cumulative" && e.bonus === "plus1").length;
-})();
+}
+
+function countCumulative(bonus: CumulativeBonus): number {
+  return allCatalogEffects().filter((e) => e.kind === "cumulative" && e.bonus === bonus)
+    .length;
+}
+
+export const TOTAL_RELANCE = countCumulative("relance");
+export const TOTAL_JOKERS = countCumulative("joker");
+export const TOTAL_PLUS1 = countCumulative("plus1");
 
 function counterSlots(): SlotDef[] {
   return [
+    {
+      slotId: "counter-relance-all",
+      source: "counter",
+      effect: fox,
+      meta: {},
+      predicate: (b) => b.bonuses.relance.unlocked >= TOTAL_RELANCE,
+    },
     {
       slotId: "counter-joker-all",
       source: "counter",
       effect: die("brown"),
       meta: {},
-      predicate: (b) => b.bonuses.joker.unlocked >= NUMBERED_JOKERS,
+      predicate: (b) => b.bonuses.joker.unlocked >= TOTAL_JOKERS,
     },
     {
       slotId: "counter-plus1-all",

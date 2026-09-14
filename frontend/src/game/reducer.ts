@@ -1,6 +1,7 @@
 import {
   ALL_DIE_COLORS,
   effectiveValue,
+  emptyPlus1UsedDice,
   otherPlayer,
   PLAYER_IDS,
   type BonusDieColor,
@@ -208,8 +209,9 @@ function startActiveSequence(state: GameState, player: PlayerId): GameState {
 }
 
 /**
- * Resolve the +1 window: skip any actor with no +1 left; when both actors have
- * been offered a +1, move on to the passive phase for the second actor.
+ * Resolve the +1 window: skip any actor with no +1 left; an actor with remaining
+ * +1s is offered again until they skip. When both actors are done, move on to
+ * the passive phase for the second actor.
  */
 function settlePlus1(state: GameState): GameState {
   if (state.phase.kind !== "plus1") return state;
@@ -236,7 +238,7 @@ function settlePlus1(state: GameState): GameState {
     phase: { kind: "plus1", order, current },
     selection: null,
     plus1Active: null,
-    message: `Joueur ${order[current]} peut utiliser un +1.`,
+    message: `Joueur ${order[current]} peut utiliser un ou plusieurs +1.`,
   };
 }
 
@@ -260,6 +262,7 @@ function endActiveSequence(state: GameState, activePlayerId: PlayerId): GameStat
     message: null,
     plus1Active: null,
     jokerPending: null,
+    plus1UsedDice: emptyPlus1UsedDice(),
   };
   return settlePlus1(base);
 }
@@ -489,6 +492,7 @@ export function createInitialState(): GameState {
     message: null,
     plus1Active: null,
     jokerPending: null,
+    plus1UsedDice: emptyPlus1UsedDice(),
     pendingBonuses: [],
     bonusResolution: null,
     pinkChoice: null,
@@ -647,7 +651,8 @@ function finishPlus1AfterWrite(
   state: GameState,
   actor: PlayerId,
   extraDice: BonusDieColor[],
-  boardWritten: PlayerBoard
+  boardWritten: PlayerBoard,
+  dieColor: DieColor
 ): GameState {
   if (state.phase.kind !== "plus1") return state;
   const pb = boardWritten.bonuses.plus1;
@@ -656,9 +661,15 @@ function finishPlus1AfterWrite(
     bonuses: { ...boardWritten.bonuses, plus1: { ...pb, used: pb.used + 1 } },
   };
   const { board, dieBonuses } = applyUnlocks(withUse);
+  const plus1UsedDice = {
+    ...state.plus1UsedDice,
+    [actor]: [...state.plus1UsedDice[actor], dieColor],
+  };
+  const stillHasPlus1 = board.bonuses.plus1.unlocked > board.bonuses.plus1.used;
   let next: GameState = {
     ...state,
     boards: { ...state.boards, [actor]: board },
+    plus1UsedDice,
     selection: null,
     plus1Active: null,
     message: null,
@@ -669,12 +680,15 @@ function finishPlus1AfterWrite(
     pendingAdvance: {
       kind: "plus1Next",
       order: state.phase.order,
-      current: state.phase.current + 1,
+      current: stillHasPlus1 ? state.phase.current : state.phase.current + 1,
     },
   });
 }
 
-/** Open the pink dialog for a normal (non-bonus) pink move, or write cell 1 directly. */
+/**
+ * Open the pink dialog for a normal (non-bonus) pink move, or write cell 1
+ * as ceil(effectiveValue / 2) with no points/bonus choice and no bonus.
+ */
 function openPinkForMove(
   state: GameState,
   owner: PlayerId,
@@ -685,9 +699,10 @@ function openPinkForMove(
   const n = cellNumber(dest);
   const effectiveValue = sel.value;
   if (n === 1) {
+    const inscribed = pinkValue(effectiveValue);
     const board: PlayerBoard = {
       ...state.boards[owner],
-      values: { ...state.boards[owner].values, [dest]: effectiveValue },
+      values: { ...state.boards[owner].values, [dest]: inscribed },
     };
     return completeAfterPinkWrite(state, resume, [], board);
   }
@@ -722,7 +737,7 @@ function completeAfterPinkWrite(
     case "passive":
       return finishPassiveAfterWrite(state, resume.player, extraDice, boardWritten);
     case "plus1":
-      return finishPlus1AfterWrite(state, resume.actor, extraDice, boardWritten);
+      return finishPlus1AfterWrite(state, resume.actor, extraDice, boardWritten, resume.sel.color);
     case "bonusDie": {
       const withBoard: GameState = {
         ...state,
@@ -755,7 +770,7 @@ function validatePlus1(state: GameState, sel: Selection, actor: PlayerId): GameS
     return openPinkForMove(state, actor, sel, { kind: "plus1", actor, sel });
   }
   const moved = applyMoveToBoard(state.boards[actor], sel, state.dice);
-  return finishPlus1AfterWrite(state, actor, [], moved);
+  return finishPlus1AfterWrite(state, actor, [], moved, sel.color);
 }
 
 function continueAfterPassive(state: GameState, player: PlayerId): GameState {
@@ -827,7 +842,9 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           return state;
         }
       } else if (phase.kind === "plus1" && state.plus1Active !== null) {
-        // A +1 replay may use any die, regardless of location.
+        if (state.plus1UsedDice[state.plus1Active].includes(action.color)) {
+          return state;
+        }
       } else {
         return state;
       }
@@ -1152,7 +1169,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           const next = { ...br, stage: "noMove" as const };
           return { ...state, bonusResolution: next, selection: null, message: resolutionMessage(next) };
         }
-        // Pink bonus die: reuse the pink dialog (or write cell 1 directly).
+        // Pink bonus die: reuse the pink dialog (or write cell 1 as ceil(v/2)).
         return openPinkForMove(
           { ...state, bonusResolution: { ...br, value: action.value, stage: "placing" } },
           br.owner,

@@ -154,9 +154,11 @@ export function legalActions(state: GameState): GameAction[] {
 
   if (phase.kind === "plus1" && state.plus1Active !== null) {
     const actor = state.plus1Active;
-    const selectable = ALL_DIE_COLORS.filter((color) =>
-      dieHasAnyLegalMove(color, passiveContext(state, actor, color))
-    );
+    const already = new Set(state.plus1UsedDice[actor]);
+    const selectable = ALL_DIE_COLORS.filter((color) => {
+      if (already.has(color)) return false;
+      return dieHasAnyLegalMove(color, passiveContext(state, actor, color));
+    });
     if (selectable.length === 0) return [{ type: "PLUS1_SKIP" }];
     return selectable.map((color) => ({ type: "SELECT_DIE" as const, color }));
   }
@@ -313,6 +315,7 @@ function fingerprint(state: GameState): string {
     dice: state.dice,
     sel: state.selection,
     plus1: state.plus1Active,
+    plus1UsedDice: state.plus1UsedDice,
     joker: state.jokerPending,
     pending: state.pendingBonuses,
     br: state.bonusResolution,

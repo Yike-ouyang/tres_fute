@@ -79,6 +79,27 @@ function phaseText(phase: Phase): string {
   }
 }
 
+/** Detect an automatic first-pink-cell write (no points/bonus dialog). */
+function pinkCell1Inscription(before: GameState, after: GameState) {
+  for (const p of PLAYER_IDS) {
+    const prev = before.boards[p].values["pink-cell-1"];
+    const next = after.boards[p].values["pink-cell-1"];
+    if (prev === undefined && next !== undefined && !after.pinkChoice) {
+      const fromSel =
+        before.selection?.actingColor === "pink" ? before.selection.value : null;
+      const fromBonus =
+        before.bonusResolution?.color === "pink" ? before.bonusResolution.value : null;
+      return {
+        joueur: p,
+        valeurEffective: fromSel ?? fromBonus,
+        valeurInscrite: next,
+        bonusAccorde: null,
+      };
+    }
+  }
+  return null;
+}
+
 function actingPlayerOf(phase: Phase): number | null {
   if (phase.kind === "active") return phase.player;
   if (phase.kind === "fill-slots") return phase.player;
@@ -117,6 +138,7 @@ function summarize(state: GameState) {
         }
       : null,
     plus1Active: state.plus1Active,
+    plus1UsedDice: state.plus1UsedDice,
     jokerPending: state.jokerPending,
     dice: ALL_DIE_COLORS.map((c) => ({
       color: c,
@@ -285,6 +307,10 @@ function logDetails(action: GameAction, before: GameState, after: GameState) {
         avant: phaseText(before.phase),
         apres: phaseText(after.phase),
       });
+      const rose1 = pinkCell1Inscription(before, after);
+      if (rose1) {
+        console.log(`${PREFIX} case rose 1 : inscription automatique`, rose1);
+      }
       break;
     }
 
@@ -339,6 +365,7 @@ function logDetails(action: GameAction, before: GameState, after: GameState) {
       console.log(`${PREFIX} +1 : début de replay`, {
         accepte: before !== after,
         joueur: after.plus1Active,
+        desDejaRejoues: after.plus1UsedDice,
       });
       break;
     }
@@ -356,6 +383,15 @@ function logDetails(action: GameAction, before: GameState, after: GameState) {
         resolution: after.bonusResolution,
         dialogueRose: after.pinkChoice ? "ouvert" : null,
       });
+      {
+        const rose1 = pinkCell1Inscription(before, after);
+        if (rose1) {
+          console.log(`${PREFIX} case rose 1 : inscription automatique`, {
+            ...rose1,
+            valeurEffective: rose1.valeurEffective ?? action.value,
+          });
+        }
+      }
       break;
 
     case "BONUS_PLACE_BLUE":

@@ -784,9 +784,18 @@
   line-height: 1;
 }
 
-.counter-slot.is-filled {
-  background: #c8e6c9;
-  border-color: #2e7d32;
+.counter-slot-relance {
+  border-radius: 50%;
+}
+
+.counter-reward-fox {
+  background: #fff3e0;
+  font-size: 0.85rem;
+}
+
+.counter-reward-fox.is-locked-fox {
+  filter: grayscale(1);
+  opacity: 0.55;
 }
 
 /* Reward attached to the right end of a counter track (not a track slot) */

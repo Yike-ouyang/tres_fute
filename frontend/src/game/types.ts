@@ -95,6 +95,11 @@ export function otherPlayer(player: PlayerId): PlayerId {
   return player === 1 ? 2 : 1;
 }
 
+/** Dice already replayed with a +1 in the current window, per player. */
+export function emptyPlus1UsedDice(): Record<PlayerId, DieColor[]> {
+  return { 1: [], 2: [] };
+}
+
 /** Independent state for a single player's board. Keys are unprefixed cell ids. */
 export interface PlayerBoard {
   checks: Record<string, boolean>;
@@ -203,6 +208,8 @@ export interface GameState {
   message: string | null;
   /** During the +1 window, the player currently making a +1 play (null otherwise). */
   plus1Active: PlayerId | null;
+  /** Dice already used for a +1 by each player in the current +1 window. */
+  plus1UsedDice: Record<PlayerId, DieColor[]>;
   /** Pending joker: chosen token and its value (null value = wild, awaiting a chosen value). */
   jokerPending: { tokenIndex: number; value: number | null } | null;
   /** FIFO queue of colored bonus dice awaiting immediate resolution. */

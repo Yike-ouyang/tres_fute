@@ -126,10 +126,11 @@ export function legalDestinations(
       );
       let sameValue: number;
       if (ctx.mode === "passive") {
+        const group = ctx.dice[ctx.selectedColor].location;
         sameValue = ALL_DIE_COLORS.filter(
           (c) =>
             c !== ctx.selectedColor &&
-            ctx.dice[c].location === "discarded" &&
+            ctx.dice[c].location === group &&
             effectiveValue(ctx.dice[c]) === value
         ).length;
       } else {
@@ -164,7 +165,7 @@ export function legalDestinations(
   }
 }
 
-/** The value written for a pink move when taking the bonus (half, rounded up). */
+/** Half the effective value, rounded up. Used for pink cell 1 and for the bonus option on cells 2–12. */
 export function pinkValue(dieValue: number): number {
   return Math.ceil(dieValue / 2);
 }
