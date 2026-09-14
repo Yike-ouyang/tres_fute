@@ -96,6 +96,9 @@
 .zone-bonus {
   background: #d6dbe0;
 }
+.zone-score {
+  background: #eceff3;
+}
 .zone-yellow {
   background: #f4c542;
 }
@@ -918,6 +921,61 @@
 .score-table tr.is-total th {
   font-weight: 800;
   border-top: 2px solid rgba(0, 0, 0, 0.25);
+}
+
+.live-score {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px 10px;
+  margin: 0;
+  font-size: 0.75rem;
+}
+
+.live-score > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.live-score dt {
+  font-weight: 600;
+}
+
+.live-score dd {
+  margin: 0;
+}
+
+.live-score-total {
+  font-weight: 800;
+  grid-column: 1 / -1;
+}
+
+.autoplay-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.autoplay-controls label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+}
+
+.autoplay-controls input {
+  width: 3.2rem;
+  padding: 2px 4px;
+}
+
+.status-fill {
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.is-sim-locked {
+  pointer-events: none;
 }
 
 /* ---- Tracks (blue / brown / pink) ---- */

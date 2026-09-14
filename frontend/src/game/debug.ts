@@ -1,6 +1,7 @@
 import { gameReducer } from "./reducer";
 import { FOX_SLOT_IDS } from "./bonuses";
 import { computeScore } from "./score";
+import type { AutoplayDecisionMeta } from "./autoplay";
 import {
   ALL_DIE_COLORS,
   PLAYER_IDS,
@@ -71,6 +72,8 @@ function phaseText(phase: Phase): string {
       return `passive(J${phase.player}, ${phase.done ? "terminé" : "en cours"})`;
     case "plus1":
       return `+1(J${phase.order[phase.current]}, ${phase.current + 1}/${phase.order.length})`;
+    case "fill-slots":
+      return `compléter-dés(J${phase.player})`;
     case "game-over":
       return "game-over";
   }
@@ -78,6 +81,7 @@ function phaseText(phase: Phase): string {
 
 function actingPlayerOf(phase: Phase): number | null {
   if (phase.kind === "active") return phase.player;
+  if (phase.kind === "fill-slots") return phase.player;
   if (phase.kind === "passive" && !phase.done) return phase.player;
   if (phase.kind === "plus1") return phase.order[phase.current];
   return null;
@@ -391,6 +395,13 @@ function logDetails(action: GameAction, before: GameState, after: GameState) {
       console.log(`${PREFIX} case rose : choix annulé (rien consommé)`);
       break;
 
+    case "FILL_SLOT":
+      console.log(`${PREFIX} complément d’emplacement (sans effet)`, {
+        couleur: action.color,
+        phase: phaseText(after.phase),
+      });
+      break;
+
     case "RESET":
       console.log(`${PREFIX} partie réinitialisée`);
       break;
@@ -452,6 +463,46 @@ function shouldLog(prev: GameState, action: GameAction): boolean {
   lastPrev = prev;
   lastAction = action;
   return true;
+}
+
+/**
+ * Extra autoplay-step log: phase, physical dice, max-die filter, chosen action.
+ * Gated on debug mode. Does not replace the per-action loggingReducer groups.
+ */
+export function logAutoplayDecision(
+  state: GameState,
+  action: GameAction,
+  meta: AutoplayDecisionMeta | null
+): void {
+  if (!enabled) return;
+  const available = ALL_DIE_COLORS.filter((c) => state.dice[c].location === "available").map(
+    (c) => ({ couleur: c, valeur: state.dice[c].value })
+  );
+  const autoTypes = new Set([
+    "VALIDATE_MOVE",
+    "CONTINUE",
+    "END_TURN",
+    "PASS_PASSIVE",
+    "FILL_SLOT",
+    "PINK_CHOOSE",
+    "BONUS_CHOOSE_COLOR",
+    "BONUS_CHOOSE_VALUE",
+    "BONUS_PLACE_BLUE",
+    "BONUS_NOMOVE_DONE",
+  ]);
+  console.log(`${PREFIX} avance`, {
+    tour: state.globalTurn,
+    phase: phaseText(state.phase),
+    manche: state.phase.kind === "active" ? state.phase.round : null,
+    joueur: actingPlayerOf(state.phase),
+    desDisponibles: available,
+    jouables: meta?.playable ?? [],
+    exclusParMax: meta?.excluded ?? [],
+    deChoisi: meta?.chosenDie ?? null,
+    maxAutorise: meta?.maxAllowedReason ?? null,
+    action: action.type,
+    validationAuto: autoTypes.has(action.type),
+  });
 }
 
 /**

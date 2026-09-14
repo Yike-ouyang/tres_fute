@@ -20,10 +20,13 @@ import {
   activeContext,
   allUncheckedTurquoise,
   anyAvailableDieHasMove,
+  anyChosenDieHasMove,
+  anyDieHasPassiveMove,
   anyDiscardedDieHasMove,
   blueBonusOptions,
   blueSum,
   bonusBrownLegal,
+  bonusHasAnyPlaceableValue,
   bonusYellowLegal,
   firstEmptyPink,
   legalDestinations,
@@ -50,6 +53,10 @@ const JOKER_PICK_DIE = "Joker : choisissez un dé à transformer.";
 const JOKER_NEED_AVAILABLE = "Le joker s'applique à un dé disponible.";
 const PINK_CHOICE_MSG = "Case rose : choisissez les points ou le bonus.";
 const BONUS_NO_VALUE = "Aucune case disponible pour cette valeur.";
+const FILL_SLOTS_MSG =
+  "Compléter les dés actifs — sans effet. Ces choix ne produisent aucun coup.";
+const PASSIVE_FALLBACK =
+  "Aucun dé passif n’est jouable : vous pouvez choisir un dé actif.";
 
 const DIE_COLOR_LABEL: Record<BonusDieColor, string> = {
   yellow: "jaune",
@@ -100,8 +107,44 @@ function emptyBoard(): PlayerBoard {
   };
 }
 
+/** If there is exactly one legal destination, preselect it (still provisional). */
+function withUniquePick(sel: Selection): Selection {
+  if (sel.legal.length === 1 && sel.picked.length === 0) {
+    return { ...sel, picked: [sel.legal[0]] };
+  }
+  return sel;
+}
+
+function hasEmptySlot(board: PlayerBoard): boolean {
+  return board.slots.some((s) => s === null);
+}
+
+function dumpAvailable(dice: Record<DieColor, DieRuntime>): Record<DieColor, DieRuntime> {
+  const next = {} as Record<DieColor, DieRuntime>;
+  for (const color of ALL_DIE_COLORS) {
+    const d = dice[color];
+    next[color] =
+      d.location === "available" ? { ...d, location: "discarded" } : { ...d };
+  }
+  return next;
+}
+
 function countAvailable(dice: Record<DieColor, DieRuntime>): number {
   return ALL_DIE_COLORS.filter((c) => dice[c].location === "available").length;
+}
+
+/** Open fill-slots if any I–III slot is empty; otherwise end the active sequence. */
+function enterFillSlotsOrEnd(state: GameState, player: PlayerId): GameState {
+  if (!hasEmptySlot(state.boards[player])) {
+    return endActiveSequence(state, player);
+  }
+  return {
+    ...state,
+    phase: { kind: "fill-slots", player },
+    selection: null,
+    message: FILL_SLOTS_MSG,
+    jokerPending: null,
+  };
 }
 
 /** Set a non-blocking stuck message appropriate to the current phase. */
@@ -115,9 +158,13 @@ function withStuckMessage(state: GameState): GameState {
       return { ...state, message: STUCK_ACTIVE };
     }
   } else if (phase.kind === "passive" && !phase.done) {
-    if (!anyDiscardedDieHasMove(state, phase.player)) {
-      return { ...state, message: STUCK_PASSIVE };
+    if (anyDiscardedDieHasMove(state, phase.player)) {
+      return state;
     }
+    if (anyChosenDieHasMove(state, phase.player)) {
+      return { ...state, message: PASSIVE_FALLBACK };
+    }
+    return { ...state, message: STUCK_PASSIVE };
   }
   return state;
 }
@@ -251,7 +298,7 @@ function enterPlacement(state: GameState, br: BonusResolution): GameState {
     return {
       ...state,
       bonusResolution: next,
-      selection: {
+      selection: withUniquePick({
         color: "turquoise",
         value: 0,
         actingColor: "turquoise",
@@ -259,7 +306,7 @@ function enterPlacement(state: GameState, br: BonusResolution): GameState {
         picked: [],
         maxPick: 1,
         eliminationValue: 0,
-      },
+      }),
       message: resolutionMessage(next),
     };
   }
@@ -278,6 +325,13 @@ function enterPlacement(state: GameState, br: BonusResolution): GameState {
       ? bonusYellowLegal(board, br.value)
       : bonusBrownLegal(board, br.value);
   if (legal.length === 0) {
+    if (
+      (br.color === "yellow" || br.color === "brown") &&
+      !bonusHasAnyPlaceableValue(board, br.color)
+    ) {
+      const dead = { ...br, stage: "noMove" as const };
+      return { ...state, bonusResolution: dead, selection: null, message: resolutionMessage(dead) };
+    }
     // Let the owner pick a different value instead of dead-ending.
     const next = { ...br, stage: "chooseValue" as const, value: null };
     return { ...state, bonusResolution: next, selection: null, message: BONUS_NO_VALUE };
@@ -286,7 +340,7 @@ function enterPlacement(state: GameState, br: BonusResolution): GameState {
   return {
     ...state,
     bonusResolution: next,
-    selection: {
+    selection: withUniquePick({
       color: br.color as DieColor,
       value: br.value,
       actingColor: br.color as Exclude<DieColor, "white">,
@@ -294,7 +348,7 @@ function enterPlacement(state: GameState, br: BonusResolution): GameState {
       picked: [],
       maxPick: 1,
       eliminationValue: 0,
-    },
+    }),
     message: resolutionMessage(next),
   };
 }
@@ -315,6 +369,14 @@ function openNextBonus(state: GameState): GameState {
     return { ...base, bonusResolution: next, message: resolutionMessage(next) };
   }
   if (needsValue(head.color)) {
+    const board = state.boards[head.owner];
+    if (
+      (head.color === "yellow" || head.color === "brown" || head.color === "pink") &&
+      !bonusHasAnyPlaceableValue(board, head.color)
+    ) {
+      const next = { ...br, stage: "noMove" as const };
+      return { ...base, bonusResolution: next, message: resolutionMessage(next) };
+    }
     return { ...base, bonusResolution: br, message: resolutionMessage(br) };
   }
   // turquoise / darkblue place immediately.
@@ -349,6 +411,8 @@ function advance(state: GameState, pending: PendingAdvance): GameState {
       });
     case "endActive":
       return endActiveSequence(state, pending.player);
+    case "fillSlots":
+      return enterFillSlotsOrEnd(state, pending.player);
     case "passiveDone":
       return {
         ...state,
@@ -486,6 +550,7 @@ function actingPlayer(state: GameState): PlayerId | null {
   if (state.bonusResolution) return state.bonusResolution.owner;
   const { phase } = state;
   if (phase.kind === "active") return phase.player;
+  if (phase.kind === "fill-slots") return phase.player;
   if (phase.kind === "passive" && !phase.done) return phase.player;
   if (phase.kind === "plus1" && state.plus1Active !== null) return state.plus1Active;
   return null;
@@ -555,6 +620,8 @@ function finishActiveAfterWrite(
   const pendingAdvance: PendingAdvance =
     round < 3 && countAvailable(dice) > 0
       ? { kind: "activeNext", player, round: round + 1 }
+      : hasEmptySlot(board)
+      ? { kind: "fillSlots", player }
       : { kind: "endActive", player };
   return drainOrAdvance({ ...next, pendingAdvance });
 }
@@ -753,7 +820,12 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       if (phase.kind === "active") {
         if (d.location !== "available") return state;
       } else if (phase.kind === "passive" && !phase.done) {
-        if (d.location !== "discarded") return state;
+        const discardedOk = anyDiscardedDieHasMove(state, phase.player);
+        if (discardedOk) {
+          if (d.location !== "discarded") return state;
+        } else if (d.location !== "chosen") {
+          return state;
+        }
       } else if (phase.kind === "plus1" && state.plus1Active !== null) {
         // A +1 replay may use any die, regardless of location.
       } else {
@@ -788,9 +860,15 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       if (legal.length === 0) {
         return { ...baseState, selection: null, message: NO_DIE_MOVE };
       }
+      const fallbackMsg =
+        phase.kind === "passive" &&
+        !phase.done &&
+        !anyDiscardedDieHasMove(baseState, phase.player)
+          ? PASSIVE_FALLBACK
+          : null;
       return {
         ...baseState,
-        selection: {
+        selection: withUniquePick({
           color: action.color,
           value,
           actingColor: action.color,
@@ -798,8 +876,8 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
           picked: [],
           maxPick,
           eliminationValue,
-        },
-        message: null,
+        }),
+        message: fallbackMsg,
       };
     }
 
@@ -815,7 +893,13 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       }
       return {
         ...state,
-        selection: { ...sel, actingColor: action.actingColor, legal, picked: [], maxPick },
+        selection: withUniquePick({
+          ...sel,
+          actingColor: action.actingColor,
+          legal,
+          picked: [],
+          maxPick,
+        }),
         message: null,
       };
     }
@@ -920,13 +1004,20 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       if (state.bonusResolution || state.pinkChoice) return state;
       const { phase } = state;
       if (phase.kind !== "active") return state;
-      return endActiveSequence(state, phase.player);
+      const dumped: GameState = {
+        ...state,
+        dice: dumpAvailable(state.dice),
+        selection: null,
+        jokerPending: null,
+      };
+      return enterFillSlotsOrEnd(dumped, phase.player);
     }
 
     case "PASS_PASSIVE": {
       if (state.bonusResolution || state.pinkChoice) return state;
       const { phase } = state;
       if (phase.kind !== "passive" || phase.done) return state;
+      if (anyDieHasPassiveMove(state, phase.player)) return state;
       return {
         ...state,
         phase: { kind: "passive", player: phase.player, done: true },
@@ -1036,6 +1127,14 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       const chosen: BonusDieColor = action.color;
       const withColor: BonusResolution = { ...br, color: chosen, value: null };
       if (needsValue(chosen)) {
+        const board = state.boards[br.owner];
+        if (
+          (chosen === "yellow" || chosen === "brown" || chosen === "pink") &&
+          !bonusHasAnyPlaceableValue(board, chosen)
+        ) {
+          const next = { ...withColor, stage: "noMove" as const };
+          return { ...state, bonusResolution: next, selection: null, message: resolutionMessage(next) };
+        }
         const next = { ...withColor, stage: "chooseValue" as const };
         return { ...state, bonusResolution: next, message: resolutionMessage(next) };
       }
@@ -1090,8 +1189,17 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     }
 
     case "BONUS_NOMOVE_DONE": {
-      if (!state.bonusResolution || state.bonusResolution.stage !== "noMove") return state;
-      return finishBonusResolution(state);
+      const br = state.bonusResolution;
+      if (!br) return state;
+      if (br.stage === "noMove") return finishBonusResolution(state);
+      if (
+        br.stage === "chooseValue" &&
+        (br.color === "yellow" || br.color === "brown" || br.color === "pink") &&
+        !bonusHasAnyPlaceableValue(state.boards[br.owner], br.color)
+      ) {
+        return finishBonusResolution(state);
+      }
+      return state;
     }
 
     case "PINK_CHOOSE": {
@@ -1143,6 +1251,30 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       }
       // Restore the prior selection so nothing is consumed.
       return { ...state, pinkChoice: null, selection: choice.resume.sel, message: null };
+    }
+
+    case "FILL_SLOT": {
+      if (state.bonusResolution || state.pinkChoice) return state;
+      const { phase } = state;
+      if (phase.kind !== "fill-slots") return state;
+      const d = state.dice[action.color];
+      if (!d || d.location !== "discarded") return state;
+      const board = state.boards[phase.player];
+      const idx = board.slots.findIndex((s) => s === null);
+      if (idx < 0) return enterFillSlotsOrEnd(state, phase.player);
+      const slots = [...board.slots];
+      slots[idx] = { color: action.color, value: d.value };
+      const dice = {
+        ...state.dice,
+        [action.color]: { ...d, location: "chosen" as const },
+      };
+      const next: GameState = {
+        ...state,
+        dice,
+        boards: { ...state.boards, [phase.player]: { ...board, slots } },
+        selection: null,
+      };
+      return enterFillSlotsOrEnd(next, phase.player);
     }
 
     case "RESET":

@@ -115,6 +115,8 @@ export type Phase =
   | { kind: "passive"; player: PlayerId; done: boolean }
   /** +1 window after an active sequence: each player in `order` may use a +1. */
   | { kind: "plus1"; order: [PlayerId, PlayerId]; current: number }
+  /** Fill remaining active slots from the grey square, without board effect. */
+  | { kind: "fill-slots"; player: PlayerId }
   | { kind: "game-over" };
 
 /** A colored bonus die awaiting immediate resolution, tied to its owner. */
@@ -168,6 +170,7 @@ export interface PinkChoice {
 export type PendingAdvance =
   | { kind: "activeNext"; player: PlayerId; round: number }
   | { kind: "endActive"; player: PlayerId }
+  | { kind: "fillSlots"; player: PlayerId }
   | { kind: "passiveDone"; player: PlayerId }
   | { kind: "plus1Next"; order: [PlayerId, PlayerId]; current: number }
   | { kind: "startTurn"; player: PlayerId };
@@ -233,4 +236,5 @@ export type GameAction =
   | { type: "BONUS_NOMOVE_DONE" }
   | { type: "PINK_CHOOSE"; option: "points" | "bonus" }
   | { type: "PINK_CANCEL" }
+  | { type: "FILL_SLOT"; color: DieColor }
   | { type: "RESET" };

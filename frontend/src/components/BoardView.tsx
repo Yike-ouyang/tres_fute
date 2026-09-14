@@ -14,13 +14,14 @@ import {
   TURQUOISE_ROWS,
 } from "../boardData";
 import { PASSIVE_YELLOW_CELLS } from "../game/rules";
+import { computeScore } from "../game/score";
 import {
   PINK_MULTIPLIERS,
   isTurquoiseDark,
   slotsBySource,
   type SlotDef,
 } from "../game/bonuses";
-import type { PlayerBoard, PlayerId } from "../game/types";
+import type { DieColor, PlayerBoard, PlayerId } from "../game/types";
 
 const PASSIVE_YELLOW_SET = new Set(PASSIVE_YELLOW_CELLS);
 
@@ -53,6 +54,12 @@ interface BoardViewProps {
   onSelect: (cellId: string) => void;
   onRelance: () => void;
   onJoker: () => void;
+  /** Click a die in an active slot (passive fallback). */
+  onSelectDie?: (color: DieColor) => void;
+  /** Which slot die is currently selected, if any. */
+  selectedDie?: DieColor | null;
+  /** Slot dice are clickable (passive fallback to active dice). */
+  slotDiceSelectable?: boolean;
 }
 
 function range(count: number): number[] {
@@ -72,6 +79,9 @@ function BoardView({
   onSelect,
   onRelance,
   onJoker,
+  onSelectDie,
+  selectedDie = null,
+  slotDiceSelectable = false,
 }: BoardViewProps) {
   const prefix = `p${playerId}-`;
 
@@ -108,11 +118,28 @@ function BoardView({
       <span key={key} className="bonus-slot-spacer" aria-hidden="true" />
     );
 
+  const score = computeScore(board);
+
   return (
     <div className={`board-view${interactive ? " is-interactive" : ""}`}>
       <h2 className="board-view-title">
         Joueur {playerId} {interactive && <span className="acting-badge">à vous de jouer</span>}
       </h2>
+
+      <section className="zone zone-score" aria-label={`Joueur ${playerId} scores provisoires`}>
+        <h3 className="zone-title">Scores provisoires</h3>
+        <dl className="live-score">
+          <div><dt>Jaune</dt><dd>{score.yellow}</dd></div>
+          <div><dt>Turquoise</dt><dd>{score.turquoise}</dd></div>
+          <div><dt>Bleu foncé</dt><dd>{score.blue}</dd></div>
+          <div><dt>Marron</dt><dd>{score.brown}</dd></div>
+          <div><dt>Rose</dt><dd>{score.pink}</dd></div>
+          <div><dt>Renards</dt><dd>{score.foxCount}</dd></div>
+          <div><dt>Valeur renard</dt><dd>{score.foxValue}</dd></div>
+          <div><dt>Points renards</dt><dd>{score.foxPoints}</dd></div>
+          <div className="live-score-total"><dt>Total</dt><dd>{score.total}</dd></div>
+        </dl>
+      </section>
 
       {/* Barre de suivi des tours : chaque bonus est directement sous son numéro */}
       <section className="zone zone-turns" aria-label={`Joueur ${playerId} tours`}>
@@ -147,6 +174,8 @@ function BoardView({
               label={DIE_LABELS[n - 1]}
               slot={board.slots[n - 1]}
               active={activeRound === n}
+              selected={!!board.slots[n - 1] && selectedDie === board.slots[n - 1]!.color}
+              onSelectDie={slotDiceSelectable ? onSelectDie : undefined}
             />
           ))}
         </div>

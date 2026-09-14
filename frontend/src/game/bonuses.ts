@@ -15,7 +15,7 @@ const die = (color: BonusDieColor): BonusEffect => ({ kind: "die", color });
 
 /** Stable slot ids for the five fox bonuses (unprefixed; DOM uses p1-/p2-). */
 export const FOX_SLOT_IDS = [
-  "gold-r2-c6",
+  "gold-r1-c6",
   "turqRow-1",
   "blue-13",
   "brownGap-11-12",
@@ -34,7 +34,7 @@ export function jokerTokenLabel(index: number): string {
 }
 
 /** Dark turquoise cells per row (top to bottom): a shrinking triangle. */
-export const TURQUOISE_DARK_COUNT = [6, 5, 4, 3, 2];
+export const TURQUOISE_DARK_COUNT = [6, 5, 3, 2, 1];
 
 export function isTurquoiseDark(row: number, col: number): boolean {
   return col <= TURQUOISE_DARK_COUNT[row - 1];
@@ -62,8 +62,8 @@ export interface SlotDef {
 
 // ---- Catalog tables ----
 
-const GOLD_ROW1: BonusEffect[] = [relance, joker, die("pink"), plus1, die("turquoise"), none];
-const GOLD_ROW2: BonusEffect[] = [joker, die("turquoise"), die("darkblue"), die("brown"), die("yellow"), fox];
+const GOLD_ROW1: BonusEffect[] = [relance, joker, die("pink"), plus1, die("turquoise"), fox];
+const GOLD_ROW2: BonusEffect[] = [joker, die("turquoise"), die("darkblue"), die("brown"), die("yellow"), plus1];
 
 // Turquoise row bonuses (rows 1..5); row 1 is the fox, row 5 has none.
 const TURQ_ROW: BonusEffect[] = [fox, plus1, die("brown"), die("turquoise"), none];
@@ -102,7 +102,7 @@ const TURN_BONUS: Record<number, BonusEffect> = {
 };
 
 // Pink line (deferred): multipliers and bonuses, displayed but inert in Phase 1.
-export const PINK_MULTIPLIERS = [0, 1, 2, 2, 1, 2, 2, 1, 3, 2, 2, 3];
+export const PINK_MULTIPLIERS = [0.5, 1, 2, 2, 1, 2, 2, 1, 3, 2, 2, 3];
 export const PINK_BONUSES: BonusEffect[] = [
   none,
   relance,

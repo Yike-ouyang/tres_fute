@@ -239,6 +239,19 @@ export function blueBonusOptions(board: PlayerBoard): BlueBonusOption[] {
   return options;
 }
 
+/** Whether a colored bonus die can still be placed for at least one value. */
+export function bonusHasAnyPlaceableValue(
+  board: PlayerBoard,
+  color: "yellow" | "brown" | "pink"
+): boolean {
+  if (color === "pink") return firstEmptyPink(board.values) !== null;
+  return [1, 2, 3, 4, 5, 6].some((v) =>
+    color === "yellow"
+      ? bonusYellowLegal(board, v).length > 0
+      : bonusBrownLegal(board, v).length > 0
+  );
+}
+
 /** Availability of each acting color for a die's value in the given context. */
 export function colorAvailability(
   value: number,
@@ -253,7 +266,7 @@ export function colorAvailability(
 
 /** Whether a die (by permanent color) has any legal move in the given context. */
 export function dieHasAnyLegalMove(color: DieColor, ctx: MoveContext): boolean {
-  const value = ctx.dice[color].value;
+  const value = effectiveValue(ctx.dice[color]);
   const localCtx: MoveContext = { ...ctx, selectedColor: color };
   if (color === "white") {
     return ACTING_COLORS.some(
@@ -306,13 +319,23 @@ export function anyAvailableDieHasMove(
   });
 }
 
-/** Whether any discarded (gray square) die has a legal move for the passive player. */
-export function anyDiscardedDieHasMove(
-  state: GameState,
-  player: number
-): boolean {
+/** Whether any discarded (grey-square) die has a legal passive move. */
+export function anyDiscardedDieHasMove(state: GameState, player: number): boolean {
   return ALL_DIE_COLORS.some((color) => {
     if (state.dice[color].location !== "discarded") return false;
     return dieHasAnyLegalMove(color, passiveContext(state, player, color));
   });
+}
+
+/** Whether any chosen (active-slot) die has a legal passive move. */
+export function anyChosenDieHasMove(state: GameState, player: number): boolean {
+  return ALL_DIE_COLORS.some((color) => {
+    if (state.dice[color].location !== "chosen") return false;
+    return dieHasAnyLegalMove(color, passiveContext(state, player, color));
+  });
+}
+
+/** Whether any of the six dice has a legal passive move. */
+export function anyDieHasPassiveMove(state: GameState, player: number): boolean {
+  return anyDiscardedDieHasMove(state, player) || anyChosenDieHasMove(state, player);
 }

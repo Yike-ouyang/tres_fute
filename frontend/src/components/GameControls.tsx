@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { Phase, PlayerId } from "../game/types";
 
 interface GameControlsProps {
@@ -21,6 +22,10 @@ interface GameControlsProps {
   onPlus1Use: () => void;
   onPlus1Skip: () => void;
   onReset: () => void;
+  remainingTurns: number;
+  simulating?: boolean;
+  simProgress?: string | null;
+  onAdvance: (n: number) => void;
 }
 
 function phaseLabel(phase: Phase): string {
@@ -33,6 +38,8 @@ function phaseLabel(phase: Phase): string {
         : `Joueur ${phase.player} — choix passif`;
     case "plus1":
       return `Fenêtre +1 — Joueur ${phase.order[phase.current]}`;
+    case "fill-slots":
+      return `Compléter les dés actifs — sans effet (Joueur ${phase.player})`;
     case "game-over":
       return "Partie terminée";
   }
@@ -40,6 +47,7 @@ function phaseLabel(phase: Phase): string {
 
 function actingPlayer(phase: Phase): number | null {
   if (phase.kind === "active") return phase.player;
+  if (phase.kind === "fill-slots") return phase.player;
   if (phase.kind === "passive" && !phase.done) return phase.player;
   if (phase.kind === "plus1") return phase.order[phase.current];
   return null;
@@ -64,14 +72,21 @@ function GameControls({
   onPlus1Use,
   onPlus1Skip,
   onReset,
+  remainingTurns,
+  simulating = false,
+  simProgress = null,
+  onAdvance,
 }: GameControlsProps) {
+  const [advanceN, setAdvanceN] = useState(1);
   const acting = actingPlayer(phase);
   const isGameOver = phase.kind === "game-over";
-  const isActive = phase.kind === "active" && !overlayActive;
-  const isPassiveOpen = phase.kind === "passive" && !phase.done && !overlayActive;
-  const isPassiveDone = phase.kind === "passive" && phase.done && !overlayActive;
+  const isActive = phase.kind === "active" && !overlayActive && !simulating;
+  const isFillSlots = phase.kind === "fill-slots" && !overlayActive && !simulating;
+  const isPassiveOpen = phase.kind === "passive" && !phase.done && !overlayActive && !simulating;
+  const isPassiveDone = phase.kind === "passive" && phase.done && !overlayActive && !simulating;
   const isPlus1Choosing =
-    phase.kind === "plus1" && plus1Active === null && !overlayActive;
+    phase.kind === "plus1" && plus1Active === null && !overlayActive && !simulating;
+  const cappedN = Math.max(1, Math.min(advanceN || 1, Math.max(1, remainingTurns)));
 
   return (
     <section className="game-controls" aria-label="Contrôles de jeu">
@@ -92,7 +107,7 @@ function GameControls({
       </div>
 
       <div className="game-buttons">
-        {!isGameOver && hasSelection && (
+        {!isGameOver && hasSelection && !simulating && (
           <>
             <button
               type="button"
@@ -106,6 +121,9 @@ function GameControls({
               Annuler
             </button>
           </>
+        )}
+        {isFillSlots && (
+          <span className="status-fill">Choisissez un dé du carré gris (sans effet).</span>
         )}
         {isActive && stuck && (
           <button type="button" className="btn btn-warn" onClick={onEndTurn}>
@@ -137,12 +155,40 @@ function GameControls({
             </button>
           </>
         )}
-        <button type="button" className="btn btn-reset" onClick={onReset}>
+        <button type="button" className="btn btn-reset" onClick={onReset} disabled={simulating}>
           Réinitialiser la partie
         </button>
+        {!isGameOver && remainingTurns > 0 && (
+          <span className="autoplay-controls">
+            <label>
+              Nombre de tours à jouer automatiquement
+              <input
+                type="number"
+                min={1}
+                max={remainingTurns}
+                value={Math.min(advanceN, remainingTurns) || 1}
+                disabled={simulating}
+                onChange={(e) => setAdvanceN(Number(e.target.value))}
+              />
+            </label>
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={simulating}
+              onClick={() => onAdvance(cappedN)}
+            >
+              Avancer
+            </button>
+          </span>
+        )}
       </div>
 
-      {message && (
+      {simProgress && (
+        <div className="game-message" role="status" aria-live="polite">
+          {simProgress}
+        </div>
+      )}
+      {message && !simulating && (
         <div className="game-message" role="status" aria-live="polite">
           {message}
         </div>
