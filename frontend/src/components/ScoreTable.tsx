@@ -1,15 +1,13 @@
-import { computeScore, type PlayerScore } from "../game/score";
-import type { PlayerBoard, PlayerId } from "../game/types";
+import type { PlayerId, PlayerScore } from "../game/types";
 
 interface ScoreTableProps {
-  boards: Record<PlayerId, PlayerBoard>;
+  scores: Record<"1" | "2", PlayerScore>;
 }
 
 interface Row {
   label: string;
   p1: number | string;
   p2: number | string;
-  /** Highlight this row as the final total. */
   total?: boolean;
 }
 
@@ -28,10 +26,9 @@ function rowsFrom(s1: PlayerScore, s2: PlayerScore): Row[] {
   ];
 }
 
-/** Comparative end-of-game scoreboard. Only rendered after the last turn is fully done. */
-function ScoreTable({ boards }: ScoreTableProps) {
-  const s1 = computeScore(boards[1]);
-  const s2 = computeScore(boards[2]);
+function ScoreTable({ scores }: ScoreTableProps) {
+  const s1 = scores["1"];
+  const s2 = scores["2"];
   const winner: PlayerId | null = s1.total === s2.total ? null : s1.total > s2.total ? 1 : 2;
 
   return (

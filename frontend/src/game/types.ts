@@ -222,6 +222,19 @@ export interface GameState {
   pendingAdvance: PendingAdvance | null;
 }
 
+export interface PlayerScore {
+  yellow: number;
+  turquoise: number;
+  blue: number;
+  brown: number;
+  pink: number;
+  colorSubtotal: number;
+  foxCount: number;
+  foxValue: number;
+  foxPoints: number;
+  total: number;
+}
+
 export type GameAction =
   | { type: "SELECT_DIE"; color: DieColor }
   | { type: "CHOOSE_WHITE_COLOR"; actingColor: ActingColor }

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import BoardView from "./components/BoardView";
 import DicePool from "./components/DicePool";
 import DiscardSquare from "./components/DiscardSquare";
@@ -8,51 +8,152 @@ import BonusResolutionPanel from "./components/BonusResolutionPanel";
 import PinkChoiceDialog from "./components/PinkChoiceDialog";
 import ScoreTable from "./components/ScoreTable";
 import Die from "./components/Die";
-import { createInitialState, gameReducer } from "./game/reducer";
-import { logAutoplayDecision, loggingReducer } from "./game/debug";
 import {
-  AUTOPLAY_STEP_CAP,
-  isGlobalTurnComplete,
-  nextAutoplayAction,
-  remainingAutoplayTurns,
-  stateFingerprint,
-} from "./game/autoplay";
-import {
-  activeContext,
-  anyAvailableDieHasMove,
-  anyChosenDieHasMove,
-  anyDieHasPassiveMove,
-  anyDiscardedDieHasMove,
-  colorAvailability,
-  passiveContext,
-} from "./game/rules";
+  ApiError,
+  createGame,
+  getGame,
+  postAction,
+  postAdvance,
+  resetGame,
+  type EngineAction,
+  type GameSnapshot,
+} from "./api/client";
 import {
   ALL_DIE_COLORS,
   PLAYER_IDS,
-  type ActingColor,
   type DieColor,
   type PlayerId,
 } from "./game/types";
 import "./App.css";
 
 const JOKER_VALUES = [1, 2, 3, 4, 5, 6];
+const EMPTY_SET = new Set<string>();
 
 function App() {
-  const [state, dispatch] = useReducer(loggingReducer, undefined, createInitialState);
-  const { phase, selection } = state;
+  const [snap, setSnap] = useState<GameSnapshot | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [simulating, setSimulating] = useState(false);
   const [simProgress, setSimProgress] = useState<string | null>(null);
-  const stateRef = useRef(state);
-  stateRef.current = state;
+  const snapRef = useRef(snap);
+  snapRef.current = snap;
+  const busyRef = useRef(false);
 
-  const legalSet = useMemo(() => new Set(selection?.legal ?? []), [selection]);
-  const pickedSet = useMemo(() => new Set(selection?.picked ?? []), [selection]);
+  useEffect(() => {
+    let cancelled = false;
+    createGame()
+      .then((g) => {
+        if (!cancelled) setSnap(g);
+      })
+      .catch((e: unknown) => {
+        if (!cancelled) {
+          setError(e instanceof Error ? e.message : "Serveur indisponible");
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
-  // An immediate bonus or the pink dialog freezes normal progression.
+  const applySnap = (next: GameSnapshot) => {
+    setSnap(next);
+    setError(null);
+  };
+
+  const send = useCallback(async (action: EngineAction) => {
+    const current = snapRef.current;
+    if (!current || busyRef.current || current.advance.running) return;
+    busyRef.current = true;
+    setBusy(true);
+    try {
+      const next = await postAction(current.id, current.version, action);
+      applySnap(next);
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 409 && e.snapshot) {
+        applySnap(e.snapshot);
+        setError("État resynchronisé (version dépassée).");
+      } else {
+        setError(e instanceof Error ? e.message : "Serveur indisponible");
+      }
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
+    }
+  }, []);
+
+  const onReset = useCallback(async () => {
+    const current = snapRef.current;
+    if (!current || busyRef.current) return;
+    busyRef.current = true;
+    setBusy(true);
+    try {
+      applySnap(await resetGame(current.id, current.version));
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 409 && e.snapshot) {
+        applySnap(e.snapshot);
+      } else {
+        setError(e instanceof Error ? e.message : "Serveur indisponible");
+      }
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
+    }
+  }, []);
+
+  const onAdvance = useCallback(async (n: number) => {
+    const current = snapRef.current;
+    if (!current || busyRef.current || current.advance.running) return;
+    busyRef.current = true;
+    setBusy(true);
+    setSimulating(true);
+    setSimProgress(`Avance automatique : 0 / ${n} tour(s)…`);
+    try {
+      let next = await postAdvance(current.id, current.version, n);
+      applySnap(next);
+      while (next.advance.running) {
+        await new Promise((r) => setTimeout(r, 200));
+        next = await getGame(next.id);
+        applySnap(next);
+        setSimProgress(
+          next.advance.message ??
+            `Avance automatique : ${next.advance.completed} / ${next.advance.quota} tour(s)…`
+        );
+      }
+      setSimProgress(next.advance.message);
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 409 && e.snapshot) {
+        applySnap(e.snapshot);
+        setError("Avance refusée (conflit).");
+      } else {
+        setError(e instanceof Error ? e.message : "Serveur indisponible");
+      }
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
+      setSimulating(false);
+    }
+  }, []);
+
+  const legalSet = useMemo(() => new Set(snap?.state.selection?.legal ?? []), [snap]);
+  const pickedSet = useMemo(() => new Set(snap?.state.selection?.picked ?? []), [snap]);
+
+  if (!snap) {
+    return (
+      <div className="board">
+        <h1 className="board-title">Plateau de dés — Duel à deux joueurs</h1>
+        <p className="game-message" role="status">
+          {error ?? "Connexion au moteur de règles…"}
+        </p>
+      </div>
+    );
+  }
+
+  const state = snap.state;
+  const { phase, selection } = state;
+
   const overlayActive = !!(state.bonusResolution || state.pinkChoice);
   const overlayOwner: PlayerId | null =
     state.bonusResolution?.owner ?? state.pinkChoice?.owner ?? null;
-
   const actingPlayer: PlayerId | null =
     overlayOwner ??
     (phase.kind === "active"
@@ -65,152 +166,38 @@ function App() {
       ? state.plus1Active
       : null);
 
-  const locked = overlayActive || simulating;
+  const locked = overlayActive || simulating || busy;
   const isActive = phase.kind === "active" && !locked;
   const isPassiveOpen = phase.kind === "passive" && !phase.done && !locked;
   const isPlus1Selecting =
     phase.kind === "plus1" && state.plus1Active !== null && !locked;
   const isFillSlots = phase.kind === "fill-slots" && !locked;
 
-  const discardedHasMove =
-    isPassiveOpen && anyDiscardedDieHasMove(state, phase.player);
-  const chosenFallback =
-    isPassiveOpen && !discardedHasMove && anyChosenDieHasMove(state, phase.player);
-
-  const availableCount = ALL_DIE_COLORS.filter(
-    (c) => state.dice[c].location === "available"
-  ).length;
-
-  const stuck = useMemo(() => {
-    if (locked) return false;
-    if (phase.kind === "active") {
-      return (
-        availableCount > 0 &&
-        !anyAvailableDieHasMove(state, phase.player, phase.round)
-      );
-    }
-    if (phase.kind === "passive" && !phase.done) {
-      return !anyDieHasPassiveMove(state, phase.player);
-    }
-    return false;
-  }, [state, phase, availableCount, locked]);
-
+  const discardedHasMove = isPassiveOpen && snap.passiveFlags.discardedHasMove;
+  const chosenFallback = isPassiveOpen && snap.passiveFlags.chosenFallback;
+  const stuck = snap.stuck && !locked;
   const canValidate =
     !!selection && selection.actingColor !== null && selection.picked.length >= 1;
   const hasSelection = !!selection;
-
   const jokerPending = !!state.jokerPending;
   const jokerNeedsValue = !!state.jokerPending && state.jokerPending.value === null;
-
-  const canUsePlus1 = useMemo(() => {
-    if (phase.kind !== "plus1") return false;
-    const actor = phase.order[phase.current];
-    const pb = state.boards[actor].bonuses.plus1;
-    return pb.unlocked > pb.used;
-  }, [phase, state.boards]);
-
+  const canUsePlus1 = snap.legalActions.some((a) => a.type === "begin_plus1");
   const showWhiteChooser =
     !!selection &&
     selection.color === "white" &&
     selection.actingColor === null &&
     actingPlayer !== null;
-
-  const whiteAvailability = useMemo(() => {
-    if (!showWhiteChooser || !selection) return null;
-    const ctx =
-      phase.kind === "active"
-        ? activeContext(state, phase.player, phase.round, "white")
-        : phase.kind === "passive"
-        ? passiveContext(state, phase.player, "white")
-        : phase.kind === "plus1" && state.plus1Active !== null
-        ? passiveContext(state, state.plus1Active, "white")
-        : null;
-    return ctx ? colorAvailability(selection.value, ctx) : null;
-  }, [showWhiteChooser, selection, state, phase]);
-
-  const onSelectCell = (cellId: string) =>
-    dispatch({ type: "PICK_CELL", cellId });
-
-  const onRelance = () => dispatch({ type: "USE_RELANCE" });
-  const onJoker = () => {
-    if (phase.kind !== "active") return;
-    dispatch({
-      type: "START_JOKER",
-      tokenIndex: state.boards[phase.player].bonuses.joker.used,
-    });
-  };
-
-  const onBonusColor = (color: ActingColor) =>
-    dispatch({ type: "BONUS_CHOOSE_COLOR", color });
-  const onBonusValue = (value: number) =>
-    dispatch({ type: "BONUS_CHOOSE_VALUE", value });
-  const onBonusPlaceBlue = (cellId: string, value: number) =>
-    dispatch({ type: "BONUS_PLACE_BLUE", cellId, value });
-  const onBonusNoMove = () => dispatch({ type: "BONUS_NOMOVE_DONE" });
-  const onPinkChoose = (option: "points" | "bonus") =>
-    dispatch({ type: "PINK_CHOOSE", option });
-  const onPinkCancel = () => dispatch({ type: "PINK_CANCEL" });
-
-  const onAdvance = useCallback(
-    async (n: number) => {
-      const quota = Math.min(n, remainingAutoplayTurns(stateRef.current));
-      if (quota <= 0) return;
-      setSimulating(true);
-      setSimProgress(`Avance automatique : 0 / ${quota} tour(s)…`);
-      let current = stateRef.current;
-      if (current.selection && !current.bonusResolution && !current.pinkChoice) {
-        current = gameReducer(current, { type: "CANCEL_SELECTION" });
-        dispatch({ type: "CANCEL_SELECTION" });
-        await new Promise((r) => requestAnimationFrame(() => r(null)));
-      }
-      if (current.jokerPending) {
-        current = gameReducer(current, { type: "CANCEL_JOKER" });
-        dispatch({ type: "CANCEL_JOKER" });
-        await new Promise((r) => requestAnimationFrame(() => r(null)));
-      }
-      let completed = 0;
-      let lastFp = stateFingerprint(current);
-      for (let step = 0; step < AUTOPLAY_STEP_CAP; step++) {
-        const beforeComplete = isGlobalTurnComplete(current);
-        const decision = nextAutoplayAction(current, completed, quota);
-        if (decision.stop) {
-          setSimProgress(
-            decision.reason ?? `Avance terminée (${completed} tour(s)).`
-          );
-          break;
-        }
-        if (!decision.action) break;
-        logAutoplayDecision(current, decision.action, decision.meta);
-        const next = gameReducer(current, decision.action);
-        dispatch(decision.action);
-        await new Promise((r) => requestAnimationFrame(() => r(null)));
-        if (!beforeComplete && isGlobalTurnComplete(next)) {
-          completed++;
-          setSimProgress(`Avance automatique : ${completed} / ${quota} tour(s)…`);
-        }
-        const fp = stateFingerprint(next);
-        if (fp === lastFp) {
-          setSimProgress("Avance interrompue : l’état n’a pas changé (blocage).");
-          break;
-        }
-        current = next;
-        lastFp = fp;
-        if (next.phase.kind === "game-over") {
-          setSimProgress("Avance terminée : partie finie.");
-          break;
-        }
-        if (step === AUTOPLAY_STEP_CAP - 1) {
-          setSimProgress("Avance interrompue : trop d’étapes (protection anti-boucle).");
-        }
-      }
-      setSimulating(false);
-    },
-    [dispatch]
-  );
+  const whiteAvailability = snap.whiteAvailability;
 
   return (
     <div className="board">
       <h1 className="board-title">Plateau de dés — Duel à deux joueurs</h1>
+
+      {error && (
+        <div className="game-message" role="alert">
+          {error}
+        </div>
+      )}
 
       <GameControls
         globalTurn={state.globalTurn}
@@ -221,30 +208,32 @@ function App() {
         stuck={stuck}
         plus1Active={state.plus1Active}
         canUsePlus1={canUsePlus1}
-        onValidate={() => dispatch({ type: "VALIDATE_MOVE" })}
-        onCancel={() => dispatch({ type: "CANCEL_SELECTION" })}
-        onEndTurn={() => dispatch({ type: "END_TURN" })}
-        onPass={() => dispatch({ type: "PASS_PASSIVE" })}
-        onContinue={() => dispatch({ type: "CONTINUE" })}
-        onPlus1Use={() => dispatch({ type: "PLUS1_USE" })}
-        onPlus1Skip={() => dispatch({ type: "PLUS1_SKIP" })}
-        onReset={() => dispatch({ type: "RESET" })}
+        onValidate={() => void send({ type: "confirm_move" })}
+        onCancel={() => void send({ type: "cancel_selection" })}
+        onEndTurn={() => void send({ type: "end_active_early" })}
+        onPass={() => void send({ type: "pass_passive" })}
+        onContinue={() => void send({ type: "continue" })}
+        onPlus1Use={() => void send({ type: "begin_plus1" })}
+        onPlus1Skip={() => void send({ type: "skip_plus1" })}
+        onReset={() => void onReset()}
         overlayActive={overlayActive}
-        remainingTurns={remainingAutoplayTurns(state)}
-        simulating={simulating}
+        remainingTurns={snap.remainingTurns}
+        simulating={simulating || busy}
         simProgress={simProgress}
-        onAdvance={onAdvance}
+        onAdvance={(n) => void onAdvance(n)}
       />
 
       {state.bonusResolution && (
         <div className={simulating ? "is-sim-locked" : undefined}>
           <BonusResolutionPanel
             resolution={state.bonusResolution}
-            board={state.boards[state.bonusResolution.owner]}
-            onChooseColor={onBonusColor}
-            onChooseValue={onBonusValue}
-            onPlaceBlue={onBonusPlaceBlue}
-            onNoMoveDone={onBonusNoMove}
+            legalActions={snap.legalActions}
+            onChooseColor={(color) => void send({ type: "choose_bonus_color", color })}
+            onChooseValue={(value) => void send({ type: "choose_bonus_value", value })}
+            onPlaceBlue={(cellId, value) =>
+              void send({ type: "place_bonus_blue", cell_id: cellId, value })
+            }
+            onNoMoveDone={() => void send({ type: "dismiss_impossible_bonus" })}
           />
         </div>
       )}
@@ -253,30 +242,27 @@ function App() {
         <div className={simulating ? "is-sim-locked" : undefined}>
           <PinkChoiceDialog
             choice={state.pinkChoice}
-            onChoose={onPinkChoose}
-            onCancel={onPinkCancel}
+            onChoose={(option) => void send({ type: "choose_pink_option", option })}
+            onCancel={() => void send({ type: "cancel_pink_option" })}
           />
         </div>
       )}
 
-      {/* Dés communs : disponibles + carré gris + choix du blanc */}
       <section className="zone shared-dice" aria-label="Dés communs">
         <div className="shared-dice-row">
           <DicePool
             state={state}
             selectable={isActive && !jokerNeedsValue}
-            onSelectDie={(color) => dispatch({ type: "SELECT_DIE", color })}
+            onSelectDie={(color) => void send({ type: "select_die", color })}
           />
           <DiscardSquare
             state={state}
-            selectable={
-              isFillSlots || (isPassiveOpen && discardedHasMove)
-            }
+            selectable={isFillSlots || (isPassiveOpen && discardedHasMove)}
             onSelectDie={(color) =>
-              dispatch(
+              void send(
                 isFillSlots
-                  ? { type: "FILL_SLOT", color }
-                  : { type: "SELECT_DIE", color }
+                  ? { type: "fill_slot_dummy", color }
+                  : { type: "select_die", color }
               )
             }
           />
@@ -290,7 +276,7 @@ function App() {
                 key={v}
                 type="button"
                 className="btn btn-small"
-                onClick={() => dispatch({ type: "SET_JOKER_VALUE", value: v })}
+                onClick={() => void send({ type: "set_joker_value", value: v })}
               >
                 {v}
               </button>
@@ -298,7 +284,7 @@ function App() {
             <button
               type="button"
               className="btn btn-small"
-              onClick={() => dispatch({ type: "CANCEL_JOKER" })}
+              onClick={() => void send({ type: "cancel_joker" })}
             >
               Annuler
             </button>
@@ -315,7 +301,7 @@ function App() {
                   color={color}
                   value={state.dice[color].value}
                   selected={selection?.color === color}
-                  onClick={() => dispatch({ type: "SELECT_DIE", color })}
+                  onClick={() => void send({ type: "select_die", color })}
                 />
               ))}
             </div>
@@ -327,20 +313,17 @@ function App() {
             availability={whiteAvailability}
             selected={selection?.actingColor ?? null}
             onChoose={(actingColor) =>
-              dispatch({ type: "CHOOSE_WHITE_COLOR", actingColor })
+              void send({ type: "choose_white_color", acting_color: actingColor })
             }
           />
         )}
       </section>
 
-      {/* Deux plateaux : Joueur 1 à gauche, Joueur 2 à droite */}
       <div className="boards-row">
         {PLAYER_IDS.map((playerId) => {
           const interactive = actingPlayer === playerId;
           const activeRound =
-            phase.kind === "active" && phase.player === playerId
-              ? phase.round
-              : null;
+            phase.kind === "active" && phase.player === playerId ? phase.round : null;
           const activeOwner =
             phase.kind === "active" && phase.player === playerId && !locked;
           return (
@@ -348,16 +331,23 @@ function App() {
               key={playerId}
               playerId={playerId}
               board={state.boards[playerId]}
-              interactive={interactive && !simulating}
+              score={snap.scores[String(playerId) as "1" | "2"]}
+              interactive={interactive && !simulating && !busy}
               legal={interactive && !simulating ? legalSet : EMPTY_SET}
               picked={interactive && !simulating ? pickedSet : EMPTY_SET}
               activeRound={activeRound}
               activeOwner={activeOwner}
-              jokerPending={activeOwner && jokerPending}
-              onSelect={onSelectCell}
-              onRelance={onRelance}
-              onJoker={onJoker}
-              onSelectDie={(color) => dispatch({ type: "SELECT_DIE", color })}
+              jokerPending={Boolean(activeOwner && jokerPending)}
+              onSelect={(cellId) => void send({ type: "pick_cell", cell_id: cellId })}
+              onRelance={() => void send({ type: "use_relance" })}
+              onJoker={() => {
+                if (phase.kind !== "active") return;
+                void send({
+                  type: "start_joker",
+                  token_index: state.boards[phase.player].bonuses.joker.used,
+                });
+              }}
+              onSelectDie={(color) => void send({ type: "select_die", color })}
               selectedDie={selection?.color ?? null}
               slotDiceSelectable={
                 chosenFallback && phase.kind === "passive" && playerId === phase.player
@@ -367,11 +357,11 @@ function App() {
         })}
       </div>
 
-      {phase.kind === "game-over" && <ScoreTable boards={state.boards} />}
+      {phase.kind === "game-over" && (
+        <ScoreTable scores={snap.scores} />
+      )}
     </div>
   );
 }
-
-const EMPTY_SET = new Set<string>();
 
 export default App;

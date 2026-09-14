@@ -1,15 +1,10 @@
 import { DIE_COLOR_OPTIONS } from "../boardData";
-import {
-  blueBonusOptions,
-  bonusBrownLegal,
-  bonusYellowLegal,
-} from "../game/rules";
-import { ACTING_COLORS, type ActingColor, type BonusResolution, type PlayerBoard } from "../game/types";
+import { ACTING_COLORS, type ActingColor, type BonusResolution } from "../game/types";
+import type { EngineAction } from "../api/client";
 
 interface BonusResolutionPanelProps {
   resolution: BonusResolution;
-  /** The owner's board (for computing legal values / blue options). */
-  board: PlayerBoard;
+  legalActions: EngineAction[];
   onChooseColor: (color: ActingColor) => void;
   onChooseValue: (value: number) => void;
   onPlaceBlue: (cellId: string, value: number) => void;
@@ -25,27 +20,19 @@ function cellPosition(cellId: string): number {
   return Number(cellId.split("-").pop());
 }
 
-/**
- * Interactive overlay for resolving one immediate colored bonus die on its
- * owner's board. Placement of yellow / brown / turquoise happens on the board
- * itself (highlighted cells + the Valider button); this panel drives the color,
- * value, dark-blue options and the no-move exit.
- */
 function BonusResolutionPanel({
   resolution,
-  board,
+  legalActions,
   onChooseColor,
   onChooseValue,
   onPlaceBlue,
   onNoMoveDone,
 }: BonusResolutionPanelProps) {
   const br = resolution;
-
-  const valueEnabled = (v: number): boolean => {
-    if (br.color === "yellow") return bonusYellowLegal(board, v).length > 0;
-    if (br.color === "brown") return bonusBrownLegal(board, v).length > 0;
-    return true; // pink: any value while a cell is free
-  };
+  const legalValues = new Set(
+    legalActions.filter((a) => a.type === "choose_bonus_value").map((a) => a.value)
+  );
+  const blueOptions = legalActions.filter((a) => a.type === "place_bonus_blue");
 
   return (
     <div className="bonus-resolution" role="group" aria-label="Résolution d'un bonus immédiat">
@@ -86,7 +73,7 @@ function BonusResolutionPanel({
                 key={v}
                 type="button"
                 className="btn btn-small"
-                disabled={!valueEnabled(v)}
+                disabled={!legalValues.has(v)}
                 onClick={() => onChooseValue(v)}
               >
                 {v}
@@ -102,14 +89,14 @@ function BonusResolutionPanel({
             Bonus bleu foncé : choisissez la case et la valeur
           </span>
           <div className="bonus-resolution-options">
-            {blueBonusOptions(board).map((opt) => (
+            {blueOptions.map((opt) => (
               <button
-                key={`${opt.cellId}-${opt.value}`}
+                key={`${opt.cell_id}-${opt.value}`}
                 type="button"
                 className="btn btn-small"
-                onClick={() => onPlaceBlue(opt.cellId, opt.value)}
+                onClick={() => onPlaceBlue(opt.cell_id as string, opt.value as number)}
               >
-                Case {cellPosition(opt.cellId)} : inscrire {opt.value}
+                Case {cellPosition(opt.cell_id as string)} : inscrire {opt.value}
               </button>
             ))}
           </div>

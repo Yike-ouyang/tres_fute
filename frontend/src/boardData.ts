@@ -24,6 +24,16 @@ export const DIE_COLOR_OPTIONS: DieColorOption[] = [
 
 export const DIE_VALUES = [1, 2, 3, 4, 5, 6] as const;
 
+/** Passive-yellow destination cells (styling on both boards). */
+export const PASSIVE_YELLOW_CELLS: string[] = [
+  "yellow-r3-c1",
+  "yellow-r3-c2",
+  "yellow-r2-c3",
+  "yellow-r2-c4",
+  "yellow-r1-c5",
+  "yellow-r1-c6",
+];
+
 /** Fixed numbers printed on every yellow / turquoise row, left to right. */
 export const ROW_NUMBERS = [1, 2, 3, 4, 5, 6] as const;
 

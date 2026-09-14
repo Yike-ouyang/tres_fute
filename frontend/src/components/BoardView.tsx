@@ -10,20 +10,19 @@ import {
   BLUE_CENTER_VALUE,
   BROWN_NUMBERS,
   DIE_LABELS,
+  PASSIVE_YELLOW_CELLS,
   ROW_NUMBERS,
   TURQUOISE_ROWS,
 } from "../boardData";
-import { PASSIVE_YELLOW_CELLS } from "../game/rules";
-import { computeScore } from "../game/score";
 import {
   PINK_MULTIPLIERS,
   isTurquoiseDark,
   slotsBySource,
   type SlotDef,
 } from "../game/bonuses";
-import type { DieColor, PlayerBoard, PlayerId } from "../game/types";
+import type { DieColor, PlayerBoard, PlayerId, PlayerScore } from "../game/types";
 
-const PASSIVE_YELLOW_SET = new Set(PASSIVE_YELLOW_CELLS);
+const PASSIVE_YELLOW_SET = new Set<string>(PASSIVE_YELLOW_CELLS);
 
 // Position-indexed lookups so each bonus is rendered exactly at its source cell.
 const TURN_BY_N = new Map(slotsBySource("turn").map((s) => [s.meta.n, s]));
@@ -39,6 +38,7 @@ const PINK_BY_N = new Map(slotsBySource("pink").map((s) => [s.meta.n, s]));
 interface BoardViewProps {
   playerId: PlayerId;
   board: PlayerBoard;
+  score: PlayerScore;
   /** True when this board is the one that must act. */
   interactive: boolean;
   /** Legal / provisional cell ids (unprefixed) for the current selection. */
@@ -70,6 +70,7 @@ function range(count: number): number[] {
 function BoardView({
   playerId,
   board,
+  score,
   interactive,
   legal,
   picked,
@@ -117,8 +118,6 @@ function BoardView({
     ) : (
       <span key={key} className="bonus-slot-spacer" aria-hidden="true" />
     );
-
-  const score = computeScore(board);
 
   return (
     <div className={`board-view${interactive ? " is-interactive" : ""}`}>
