@@ -89,6 +89,25 @@ def first_empty_pink(values: dict[str, int]) -> str | None:
     return None
 
 
+def turquoise_companion_count(ctx: MoveContext, value: int) -> int:
+    """Number of dice sharing ``value`` with the selected die in the turquoise group.
+
+    Active games count ``chosen_this_turn``; passive / +1 games count dice sharing the
+    selected die's location (grey square or slot). The selected die is never its own
+    companion. This is the engine's own turquoise grouping, exposed for the policy.
+    """
+    if ctx["mode"] == "passive":
+        group = ctx["dice"][ctx["selected_color"]]["location"]
+        return sum(
+            1
+            for c in ALL_DIE_COLORS
+            if c != ctx["selected_color"]
+            and ctx["dice"][c]["location"] == group
+            and effective_value(ctx["dice"][c]) == value
+        )
+    return sum(1 for d in ctx["board"]["chosen_this_turn"] if d["value"] == value)
+
+
 def legal_destinations(acting_color: ActingColor, value: int, ctx: MoveContext) -> LegalResult:
     board = ctx["board"]
     if acting_color == "yellow":
@@ -105,17 +124,7 @@ def legal_destinations(acting_color: ActingColor, value: int, ctx: MoveContext) 
             for r in TURQUOISE_ROWS
             if not board["checks"].get(f"turquoise-r{r}-c{value}")
         ]
-        if ctx["mode"] == "passive":
-            group = ctx["dice"][ctx["selected_color"]]["location"]
-            same_value = sum(
-                1
-                for c in ALL_DIE_COLORS
-                if c != ctx["selected_color"]
-                and ctx["dice"][c]["location"] == group
-                and effective_value(ctx["dice"][c]) == value
-            )
-        else:
-            same_value = sum(1 for d in board["chosen_this_turn"] if d["value"] == value)
+        same_value = turquoise_companion_count(ctx, value)
         cap = 1 + same_value
         return {"legal": free, "max_pick": min(cap, len(free))}
     if acting_color == "pink":

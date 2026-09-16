@@ -51,11 +51,14 @@ def _events(before: GameState, after: GameState, action: Action) -> list[Event]:
 class GameEngine:
     """One match. Dice RNG is isolated; autoplay must use a separate Random."""
 
-    def __init__(self, seed: int | None = None, state: GameState | None = None) -> None:
+    def __init__(self, seed: int | None = None, state: GameState | None = None, log_actions: bool = True) -> None:
         self.seed = seed if seed is not None else random.randrange(2**31)
         self.rng = random.Random(self.seed)
         self.state: GameState = state if state is not None else create_initial_state(self.rng)
         self.action_log: list[Action] = []
+        # ``log_actions`` can be disabled by RL training loops to avoid accumulating
+        # one dict per applied action across thousands of episodes.
+        self.log_actions = log_actions
         self.rules_version = RULES_VERSION
 
     def new_game(self, seed: int | None = None) -> GameState:
@@ -79,7 +82,8 @@ class GameEngine:
             self.rng.setstate(rng_state)
             return []
         self.state = after
-        self.action_log.append(copy.deepcopy(action))
+        if self.log_actions:
+            self.action_log.append(copy.deepcopy(action))
         return _events(before, after, action)
 
     def observe(self, player: PlayerId | None = None) -> dict[str, Any]:

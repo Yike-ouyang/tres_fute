@@ -67,7 +67,12 @@ source .venv/bin/activate
 python simulation/run_game.py --seeds 1,2,3 --turns 6
 ```
 
-La politique « éviter le max physique » sur les manches actives 1–2 est dans `simulation/policy.py`, pas dans `legal_actions()` du moteur.
+L’avance rapide utilise `HeuristicPolicy` (`simulation/policy.py`) : elle applique les préférences hiérarchisées (manche 1 ≤ 3 dés retirés, manche 2 conserve un dé puis un rose/blanc/jaune, marron évite les positions 4/5/6, bleu privilégie la branche droite, tirage marron/bleu à 75 %, bonus rose, turquoise par valeur commune) puis départage au hasard. Elle peut aussi servir d’adversaire fixe pour un joueur.
+
+- RNG **dédié** (graine via `HeuristicPolicy(seed=…)`), indépendant du RNG des dés : une même graine rejoue la même partie.
+- Les règles sont des **préférences** filtrant les coups légaux du moteur ; elles ne bloquent jamais le jeu (repli si une préférence est impossible).
+- **Ressources facultatives** (relance, joker, +1) : probabilités configurables (`relance_probability`, `joker_probability`, `plus1_probability`), **0 par défaut** — jamais consommées automatiquement. Mode debug : `HeuristicPolicy(seed=…, debug=True)` puis `drain_log()`.
+- L’ancien filtre « éviter le max physique » est conservé comme helper de compatibilité (`restrict_active_die_select`) mais n’est plus utilisé par l’avance rapide.
 
 ## Routes
 
@@ -81,3 +86,14 @@ La politique « éviter le max physique » sur les manches actives 1–2 est dan
 | `GET` | `/health` | OK |
 
 Une commande répétée (`command_id`) renvoie le résultat déjà produit. Une `expected_version` dépassée répond `409` avec l’état courant. Pendant une avance, les actions manuelles répondent `409`.
+
+## Environnement RL (Gymnasium)
+
+`rl_env/` expose la partie complète à deux joueurs comme environnement Gymnasium (agent appris contre adversaire fixe, sans HTTP). Voir `rl_env/README.md`. Démonstration :
+
+```bash
+cd backend && source .venv/bin/activate
+python rl_env/run_episode.py --episodes 3 --agent-player random --opponent heuristic
+```
+
+`gymnasium` et `numpy` sont dans `requirements.txt` ; `sb3-contrib` (MaskablePPO) est optionnel.
