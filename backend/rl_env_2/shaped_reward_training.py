@@ -9,8 +9,9 @@ def _(mo):
     mo.md("""
     # Entraînement shaped-reward — Δ(min_zone), PBRS, variance
 
-    Trois variantes alternatives de reward, chacune repartant du **meilleur
-    modèle du run `solo_score_delta`**.
+    Trois variantes alternatives de reward. Chaque run repart soit du
+    **meilleur modèle du run `solo_score_delta`**, soit d'une **politique
+    vierge** (option *from scratch*).
 
     | Run | Terme ajouté à `Δ(score)/100` |
     |-----|-------------------------------|
@@ -103,19 +104,16 @@ def _(backend):
         (backend / "runs").glob("solo_*/score_delta_solo/best_model.zip"),
         key=lambda p: p.stat().st_mtime,
     )
-    if not candidates:
-        raise FileNotFoundError(
-            "Aucun best_model.zip sous runs/solo_*/score_delta_solo/. "
-            "Lance d'abord train_solo_score_delta.py."
-        )
-    SOLO_BEST = candidates[-1]
+    # None si aucun checkpoint solo : on peut alors entraîner from scratch.
+    SOLO_BEST = candidates[-1] if candidates else None
     return (SOLO_BEST,)
 
 
 @app.cell
 def _(OUTPUT_DIR, SOLO_BEST, mo):
+    _start = f"`{SOLO_BEST}`" if SOLO_BEST is not None else "_aucun (from scratch possible)_"
     mo.md(f"""
-    - **Checkpoint de départ** : `{SOLO_BEST}`
+    - **Checkpoint de départ** : {_start}
     - **Dossier de sortie**   : `{OUTPUT_DIR}`
     """)
     return
@@ -288,7 +286,10 @@ def _(textwrap):
         p.add_argument("--eval-episodes", type=int, default=200)
         p.add_argument("--eval-every", type=int, default=50_000)
         p.add_argument("--checkpoint-every", type=int, default=200_000)
-        p.add_argument("--start-from", type=Path, required=True)
+        p.add_argument("--start-from", type=Path, default=None,
+                       help="Checkpoint de départ (ignoré si --from-scratch).")
+        p.add_argument("--from-scratch", action="store_true",
+                       help="Initialise une politique MaskablePPO vierge.")
         p.add_argument("--checkpoint", type=Path, default=DEFAULT_CHECKPOINT)
         p.add_argument("--device", default="cpu")
         p.add_argument("--torch-threads", type=int, default=1)
@@ -406,8 +407,9 @@ def _(textwrap):
         from sb3_contrib import MaskablePPO
 
         run_dir.mkdir(parents=True, exist_ok=True)
+        origin = "scratch" if args.from_scratch else str(args.start_from)
         (run_dir / "run_config.json").write_text(
-            json.dumps({**vars(args), "start_from": str(args.start_from),
+            json.dumps({**vars(args), "start_from": origin, "from_scratch": args.from_scratch,
                         "output_dir": str(args.output_dir),
                         "checkpoint": str(args.checkpoint)}, indent=2, default=str),
             encoding="utf-8",
@@ -419,9 +421,32 @@ def _(textwrap):
         train_env = DummyVecEnv([_make_train_env(s, mode, args) for s in seeds])
         eval_seeds = _eval_seeds(args.eval_seed, args.eval_episodes)
 
-        # Resume always from the provided start checkpoint (solo delta best).
-        model = MaskablePPO.load(str(args.start_from), env=train_env, device=args.device)
-        reset = False
+        if args.from_scratch:
+            # Politique vierge, mêmes hyperparamètres que le checkpoint solo.
+            model = MaskablePPO(
+                "MultiInputPolicy",
+                train_env,
+                learning_rate=args.learning_rate,
+                n_steps=args.n_steps,
+                batch_size=args.batch_size,
+                n_epochs=args.n_epochs,
+                gamma=args.gamma,
+                gae_lambda=0.95,
+                ent_coef=args.ent_coef,
+                clip_range=0.2,
+                vf_coef=0.5,
+                max_grad_norm=0.5,
+                target_kl=0.03,
+                policy_kwargs=json.loads(args.policy_kwargs),
+                seed=args.seed,
+                device=args.device,
+                verbose=1,
+            )
+            reset = True
+        else:
+            # Repart du checkpoint de départ (best_model solo delta score).
+            model = MaskablePPO.load(str(args.start_from), env=train_env, device=args.device)
+            reset = False
 
         model.set_random_seed(args.seed)
         formats = ["stdout", "csv"] + (["tensorboard"] if args.tensorboard else [])
@@ -489,7 +514,7 @@ def _(textwrap):
                     _save(self.model, best_path)
 
         target = model.num_timesteps + args.timesteps
-        print(f"[{mode}] training to {target} (from {args.start_from})", flush=True)
+        print(f"[{mode}] training to {target} (from {origin})", flush=True)
         # reset_num_timesteps=False : SB3 ajoute lui-même le compteur courant
         # (``total_timesteps += self.num_timesteps`` dans _setup_learn). On passe
         # donc le nombre de pas *additionnels* pour obtenir exactement
@@ -500,7 +525,8 @@ def _(textwrap):
 
         metadata = {
             "mode": mode,
-            "start_from": str(args.start_from),
+            "start_from": origin,
+            "from_scratch": args.from_scratch,
             "timesteps_requested": args.timesteps,
             "num_timesteps_end": model.num_timesteps,
             "rules_version": RULES_VERSION,
@@ -534,7 +560,12 @@ def _(textwrap):
         import torch
         torch.set_num_threads(args.torch_threads)
 
-        if not args.start_from.exists():
+        if args.from_scratch:
+            if args.start_from is not None:
+                print("Note: --from-scratch fourni, --start-from ignoré.", flush=True)
+        elif args.start_from is None:
+            raise SystemExit("--start-from requis (ou --from-scratch).")
+        elif not args.start_from.exists():
             raise FileNotFoundError(f"start_from introuvable: {args.start_from}")
         if not args.checkpoint.exists():
             raise FileNotFoundError(f"checkpoint adversaire introuvable: {args.checkpoint}")
@@ -577,6 +608,9 @@ def _(SCRIPT_PATH, mo):
 
 @app.cell
 def _(CONFIG, mo):
+    FROM_SCRATCH = mo.ui.checkbox(
+        label="Partir d'un modèle vierge (from scratch)", value=False
+    )
     RUN_TRAINING = mo.ui.run_button(
         label=f"Lancer l'entraînement (3 × {CONFIG['timesteps_per_run']:,} pas, en parallèle)"
     )
@@ -584,19 +618,24 @@ def _(CONFIG, mo):
         f"""
         ### Lancement manuel
 
+        {FROM_SCRATCH}
+
         {RUN_TRAINING}
 
-        Aucun entraînement ne démarre à l'ouverture du notebook : clique sur le
-        bouton pour lancer les runs `min_zone`, `pbrs` et `variance` **en
-        parallèle** ({CONFIG['timesteps_per_run']:,} pas chacun).
+        Aucun entraînement ne démarre à l'ouverture du notebook. Coche **from
+        scratch** pour repartir d'une politique vierge, sinon le run repart du
+        meilleur modèle solo. Clique sur le bouton pour lancer les runs
+        `min_zone`, `pbrs` et `variance` **en parallèle**
+        ({CONFIG['timesteps_per_run']:,} pas chacun).
         """
     )
-    return (RUN_TRAINING,)
+    return FROM_SCRATCH, RUN_TRAINING
 
 
 @app.cell
 def _(
     CONFIG,
+    FROM_SCRATCH,
     OUTPUT_DIR,
     POLICY_KWARGS,
     RUN_TRAINING,
@@ -609,9 +648,16 @@ def _(
 ):
     mo.stop(not RUN_TRAINING.value, mo.md("_Entraînement non lancé._"))
 
+    if FROM_SCRATCH.value:
+        _origin_args = ["--from-scratch"]
+    else:
+        mo.stop(SOLO_BEST is None,
+                mo.md("_Aucun best_model solo trouvé : coche « from scratch »._"))
+        _origin_args = ["--start-from", str(SOLO_BEST)]
+
     _base_cmd = [
         sys.executable, "-u", str(SCRIPT_PATH),
-        "--start-from", str(SOLO_BEST),
+        *_origin_args,
         "--output-dir", str(OUTPUT_DIR),
         "--timesteps", str(CONFIG["timesteps_per_run"]),
         "--n-envs", str(CONFIG["n_envs"]),

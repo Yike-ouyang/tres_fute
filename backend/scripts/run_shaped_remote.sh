@@ -22,6 +22,11 @@
 #   ssh -N -L 6007:127.0.0.1:6006 astragale.polytechnique.fr
 #   # then open http://localhost:6007
 #
+# Start origin (start command):
+#   default              -> from scratch (blank MaskablePPO policy)
+#   --no-from-scratch    -> from the latest runs/solo_*/score_delta_solo/best_model.zip
+#   --start-from PATH    -> from an explicit checkpoint
+#
 # Usage:
 #   scripts/run_shaped_remote.sh install
 #   scripts/run_shaped_remote.sh start [options]
@@ -65,6 +70,7 @@ CHECKPOINT_EVERY=200000
 DEVICE=cpu
 TORCH_THREADS=1
 START_FROM=""
+FROM_SCRATCH=1
 CHECKPOINT="$RUNS/essai_01/best_model.zip"
 OUTPUT_DIR=""
 MODES="min_zone,pbrs,variance"
@@ -168,7 +174,9 @@ parse_start_opts() {
             --checkpoint-every) CHECKPOINT_EVERY="$2"; shift 2;;
             --device) DEVICE="$2"; shift 2;;
             --torch-threads) TORCH_THREADS="$2"; shift 2;;
-            --start-from) START_FROM="$2"; shift 2;;
+            --start-from) START_FROM="$2"; FROM_SCRATCH=0; shift 2;;
+            --from-scratch) FROM_SCRATCH=1; shift;;
+            --no-from-scratch) FROM_SCRATCH=0; shift;;
             --checkpoint) CHECKPOINT="$2"; shift 2;;
             --output-dir) OUTPUT_DIR="$2"; shift 2;;
             --modes) MODES="$2"; shift 2;;
@@ -190,12 +198,19 @@ cmd_start() {
 Copie-le depuis ta machine locale (depuis la racine du repo local):
   rsync -avR backend/runs/essai_01/best_model.zip $REMOTE_HOST:~/tres_fute/"
 
-    if [ -z "$START_FROM" ]; then
-        START_FROM="$(latest_solo_best)"
-    fi
-    [ -n "$START_FROM" ] && [ -f "$START_FROM" ] || die "start_from introuvable.
+    if [ "$FROM_SCRATCH" = 1 ]; then
+        ORIGIN="scratch"
+        ORIGIN_ARGS=(--from-scratch)
+    else
+        if [ -z "$START_FROM" ]; then
+            START_FROM="$(latest_solo_best)"
+        fi
+        [ -n "$START_FROM" ] && [ -f "$START_FROM" ] || die "start_from introuvable.
 Copie le best_model solo depuis ta machine locale:
   rsync -avR backend/runs/solo_<timestamp>/score_delta_solo/best_model.zip $REMOTE_HOST:~/tres_fute/"
+        ORIGIN="$START_FROM"
+        ORIGIN_ARGS=(--start-from "$START_FROM")
+    fi
 
     regenerate_train_script
 
@@ -212,7 +227,7 @@ Copie le best_model solo depuis ta machine locale:
     for mode in "${MODE_ARR[@]}"; do
         log="$OUTPUT_DIR/training_${mode}.log"
         nohup "$PY" -u "$TRAIN_SCRIPT" \
-            --start-from "$START_FROM" \
+            "${ORIGIN_ARGS[@]}" \
             --checkpoint "$CHECKPOINT" \
             --output-dir "$OUTPUT_DIR" \
             --timesteps "$TIMESTEPS" \
@@ -246,7 +261,7 @@ Copie le best_model solo depuis ta machine locale:
     cat <<EOF
 
 Sortie          : $OUTPUT_DIR
-Start checkpoint: $START_FROM
+Start origin    : $ORIGIN
 Adversaire      : $CHECKPOINT
 Suivi           : $0 status
 Logs            : $0 logs
