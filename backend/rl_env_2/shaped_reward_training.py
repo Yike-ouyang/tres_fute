@@ -19,7 +19,8 @@ def _(mo):
     | `variance` | `−β · Δ(var(zones_agent))` |
 
     **L'entraînement n'est pas lancé automatiquement** : il démarre quand tu
-    cliques sur le bouton (cellule 10), dans un sous-processus détaché :
+    cliques sur le bouton, dans **trois sous-processus détachés en parallèle**
+    (un par variante, `2 M` pas chacun à partir du même checkpoint) :
 
     - pas de timeout de cellule, kernel marimo réactif,
     - survit à la fermeture du navigateur ou au redémarrage de marimo,
@@ -405,6 +406,12 @@ def _(textwrap):
         from sb3_contrib import MaskablePPO
 
         run_dir.mkdir(parents=True, exist_ok=True)
+        (run_dir / "run_config.json").write_text(
+            json.dumps({**vars(args), "start_from": str(args.start_from),
+                        "output_dir": str(args.output_dir),
+                        "checkpoint": str(args.checkpoint)}, indent=2, default=str),
+            encoding="utf-8",
+        )
         best_path = run_dir / "best_model.zip"
         last_path = run_dir / "last_model.zip"
 
@@ -483,7 +490,11 @@ def _(textwrap):
 
         target = model.num_timesteps + args.timesteps
         print(f"[{mode}] training to {target} (from {args.start_from})", flush=True)
-        model.learn(total_timesteps=target, callback=EvalCallback(),
+        # reset_num_timesteps=False : SB3 ajoute lui-même le compteur courant
+        # (``total_timesteps += self.num_timesteps`` dans _setup_learn). On passe
+        # donc le nombre de pas *additionnels* pour obtenir exactement
+        # ``args.timesteps`` pas de plus (sinon le compteur est compté deux fois).
+        model.learn(total_timesteps=args.timesteps, callback=EvalCallback(),
                     reset_num_timesteps=reset, use_masking=True)
         _save(model, last_path)
 
@@ -534,12 +545,6 @@ def _(textwrap):
                 raise ValueError(f"Mode inconnu: {m}")
 
         args.output_dir.mkdir(parents=True, exist_ok=True)
-        (args.output_dir / "run_config.json").write_text(
-            json.dumps({**vars(args), "start_from": str(args.start_from),
-                        "output_dir": str(args.output_dir),
-                        "checkpoint": str(args.checkpoint)}, indent=2, default=str),
-            encoding="utf-8",
-        )
         print(f"Run dir: {args.output_dir.resolve()}", flush=True)
 
         for mode in modes:
@@ -573,7 +578,7 @@ def _(SCRIPT_PATH, mo):
 @app.cell
 def _(CONFIG, mo):
     RUN_TRAINING = mo.ui.run_button(
-        label=f"Lancer l'entraînement (3 × {CONFIG['timesteps_per_run']:,} pas)"
+        label=f"Lancer l'entraînement (3 × {CONFIG['timesteps_per_run']:,} pas, en parallèle)"
     )
     mo.md(
         f"""
@@ -582,7 +587,8 @@ def _(CONFIG, mo):
         {RUN_TRAINING}
 
         Aucun entraînement ne démarre à l'ouverture du notebook : clique sur le
-        bouton pour lancer les runs `min_zone`, `pbrs` et `variance`.
+        bouton pour lancer les runs `min_zone`, `pbrs` et `variance` **en
+        parallèle** ({CONFIG['timesteps_per_run']:,} pas chacun).
         """
     )
     return (RUN_TRAINING,)
@@ -603,8 +609,7 @@ def _(
 ):
     mo.stop(not RUN_TRAINING.value, mo.md("_Entraînement non lancé._"))
 
-    LOG_PATH = OUTPUT_DIR / "training.log"
-    _cmd = [
+    _base_cmd = [
         sys.executable, "-u", str(SCRIPT_PATH),
         "--start-from", str(SOLO_BEST),
         "--output-dir", str(OUTPUT_DIR),
@@ -627,31 +632,39 @@ def _(
         "--device", CONFIG["device"],
         "--torch-threads", str(CONFIG["torch_threads"]),
         "--policy-kwargs", json.dumps(POLICY_KWARGS),
-        "--modes", "min_zone,pbrs,variance",
     ]
-    _log = open(LOG_PATH, "w")
-    PROC = subprocess.Popen(
-        _cmd,
-        stdout=_log,
-        stderr=subprocess.STDOUT,
-        stdin=subprocess.DEVNULL,
-        start_new_session=True,   # détache du groupe de processus marimo
-    )
-    return LOG_PATH, PROC
+    PROCS = {}
+    LOG_PATHS = {}
+    for _mode in ("min_zone", "pbrs", "variance"):
+        _log_path = OUTPUT_DIR / f"training_{_mode}.log"
+        LOG_PATHS[_mode] = _log_path
+        _log = open(_log_path, "w")
+        PROCS[_mode] = subprocess.Popen(
+            _base_cmd + ["--modes", _mode],
+            stdout=_log,
+            stderr=subprocess.STDOUT,
+            stdin=subprocess.DEVNULL,
+            start_new_session=True,   # détache du groupe de processus marimo
+        )
+    return LOG_PATHS, PROCS
 
 
 @app.cell
-def _(LOG_PATH, OUTPUT_DIR, PROC, mo):
+def _(LOG_PATHS, OUTPUT_DIR, PROCS, mo):
+    _lines = []
+    for _mode, _proc in PROCS.items():
+        _state = "**en cours**" if _proc.poll() is None else f"**terminé** (exit={_proc.returncode})"
+        _lines.append(f"- `{_mode}` : PID **{_proc.pid}** — {_state} — log `{LOG_PATHS[_mode].name}`")
+    _body = "\n".join(_lines)
     mo.md(f"""
-    ### Entraînement lancé
+    ### Entraînement lancé (3 variantes en parallèle)
 
-    - PID              : **{PROC.pid}**
-    - Log              : `{LOG_PATH}`
+    {_body}
+
     - Sortie TensorBoard : `{OUTPUT_DIR}`
-    - Statut           : {"**en cours**" if PROC.poll() is None else f"**terminé** (exit={PROC.returncode})"}
 
-    Le processus tourne indépendamment de marimo. Fermer l'onglet ou
-    redémarrer le serveur ne l'arrête pas.
+    Les processus tournent indépendamment de marimo. Fermer l'onglet ou
+    redémarrer le serveur ne les arrête pas.
     """)
     return
 
@@ -699,8 +712,8 @@ def _(OUTPUT_DIR, json, mo):
             return json.loads(path.read_text())
         return None
 
-    def _last_log_lines(n: int = 8):
-        log = OUTPUT_DIR / "training.log"
+    def _last_log_lines(mode: str, n: int = 6):
+        log = OUTPUT_DIR / f"training_{mode}.log"
         if not log.exists():
             return []
         with log.open("r", errors="replace") as f:
@@ -708,6 +721,7 @@ def _(OUTPUT_DIR, json, mo):
         return [line.rstrip() for line in lines[-n:]]
 
     rows = []
+    tails = []
     for mode in ("min_zone", "pbrs", "variance"):
         m = _read_metrics(mode)
         if m:
@@ -719,13 +733,16 @@ def _(OUTPUT_DIR, json, mo):
             )
         else:
             rows.append(f"| `{mode}` | — | — | — | — | — | — | — |")
+        lines = _last_log_lines(mode)
+        block = "\n".join(f"    {line}" for line in lines) or "    (log vide)"
+        tails.append(f"**{mode}**\n```\n{block}\n```")
 
     table = (
         "| Run | win | draw | score | opp | fox | min_zone | zones_compl |\n"
         "|-----|-----|------|-------|-----|-----|----------|-------------|\n"
         + "\n".join(rows)
     )
-    tail = "\n".join(f"    {line}" for line in _last_log_lines(8)) or "    (log vide)"
+    logs = "\n\n".join(tails)
 
     mo.md(
         f"""
@@ -733,23 +750,11 @@ def _(OUTPUT_DIR, json, mo):
 
         {table}
 
-        ### Dernières lignes de log
+        ### Dernières lignes de log (par variante)
 
-        ```
-        {tail}
-        ```
+        {logs}
         """
     )
-    return
-
-
-@app.cell
-def _():
-    return
-
-
-@app.cell
-def _():
     return
 
 
