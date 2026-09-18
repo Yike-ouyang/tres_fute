@@ -1,0 +1,262 @@
+{
+  "version": "1",
+  "metadata": {
+    "marimo_version": "0.24.2",
+    "script_metadata_hash": null
+  },
+  "cells": [
+    {
+      "id": "Hbol",
+      "code_hash": "19823cd1ce67f799cf843e75dd3745f6",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h1 id=\"entrainement-shaped-reward-min_zone-pbrs-variance\">Entra\u00eenement shaped-reward \u2014 \u0394(min_zone), PBRS, variance</h1>\n<span class=\"paragraph\">Trois variantes alternatives de reward, chacune repartant du <strong>meilleur\nmod\u00e8le du run <code>solo_score_delta</code></strong>.</span>\n<table>\n<thead>\n<tr>\n<th>Run</th>\n<th>Terme ajout\u00e9 \u00e0 <code>\u0394(score)/100</code></th>\n</tr>\n</thead>\n<tbody>\n<tr>\n<td><code>min_zone</code></td>\n<td><code>\u03b1 \u00b7 \u0394(min_zone_agent)</code></td>\n</tr>\n<tr>\n<td><code>pbrs</code></td>\n<td><code>\u03b3 \u00b7 \u03a6(s') \u2212 \u03a6(s)</code> avec <code>\u03a6(s) = \u03c6 \u00b7 fox_count \u00b7 min_zone</code></td>\n</tr>\n<tr>\n<td><code>variance</code></td>\n<td><code>\u2212\u03b2 \u00b7 \u0394(var(zones_agent))</code></td>\n</tr>\n</tbody>\n</table>\n<span class=\"paragraph\"><strong>L'entra\u00eenement n'est pas lanc\u00e9 automatiquement</strong> : il d\u00e9marre quand tu\ncliques sur le bouton (cellule 10), dans un sous-processus d\u00e9tach\u00e9 :</span>\n<ul>\n<li>pas de timeout de cellule, kernel marimo r\u00e9actif,</li>\n<li>survit \u00e0 la fermeture du navigateur ou au red\u00e9marrage de marimo,</li>\n<li>les cellules de monitoring relisent les fichiers \u00e0 la demande.</li>\n</ul></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "MJUe",
+      "code_hash": "b39c61d36d89bee614c3229e525ad2e0",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "vblA",
+      "code_hash": "edae0cf78ec63ed783e42ee098c32ad5",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "bkHC",
+      "code_hash": "a420e9c1ca5b8f47f071b628ed7706e5",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "lEQa",
+      "code_hash": "84b197dabd611c94d20ac5b275e0e916",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "PKri",
+      "code_hash": "1bc1b581429e8c78ed58dc061340ab90",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><ul>\n<li><strong>Checkpoint de d\u00e9part</strong> : <code>/home/yike-ouyang/Documents/code_perso/tres_fute/backend/runs/solo_20260917_111741/score_delta_solo/best_model.zip</code></li>\n<li><strong>Dossier de sortie</strong>   : <code>/home/yike-ouyang/Documents/code_perso/tres_fute/backend/runs/shaped_20260917_203604</code></li>\n</ul></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "Xref",
+      "code_hash": "37b929bf1733a54d3427d05582ef80c4",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h2 id=\"detail-des-rewards\">D\u00e9tail des rewards</h2>\n<span class=\"paragraph\">Toutes les variantes <strong>incluent</strong> la r\u00e9compense de base <code>\u0394(score)/100</code>\n(mode <code>score_delta_normalized</code>). On ajoute un terme de shaping \u00e0 chaque pas.</span>\n<h3 id=\"1-min_zone\">1. <code>min_zone</code></h3>\n<span class=\"paragraph\">r = \u0394(score)/100 + \u03b1 \u00b7 \u0394(min_zone_agent)\nDense (\u00e0 chaque progression de la zone la plus faible), peut \u00eatre n\u00e9gatif.\nPousse l'agent \u00e0 \u00e9quilibrer son plateau sans attendre le renard.</span>\n<h3 id=\"2-pbrs-potential-based-reward-shaping\">2. <code>pbrs</code> \u2014 potential-based reward shaping</h3>\n<span class=\"paragraph\">\u03a6(s) = \u03c6 \u00b7 fox_count(s) \u00b7 min_zone(s)\nr = \u0394(score)/100 + \u03b3 \u00b7 \u03a6(s') \u2212 \u03a6(s)\nShaping th\u00e9oriquement non biais\u00e9 (Ng, Harada, Russell 1999). La politique\noptimale est <strong>inchang\u00e9e</strong> ; l'agent est seulement guid\u00e9 vers les \u00e9tats \u00e0\nfort potentiel renard. <code>\u03c6 = 0.01</code> ram\u00e8ne \u03a6 sur la m\u00eame \u00e9chelle que le reward\nde base (~0.01\u20130.1 par pas).</span>\n<h3 id=\"3-variance\">3. <code>variance</code></h3>\n<span class=\"paragraph\">r = \u0394(score)/100 \u2212 \u03b2 \u00b7 \u0394(var(zones_agent))\nP\u00e9nalise la dispersion entre les 5 zones. L'agent apprend \u00e0 garder un\nplateau \u00e9quilibr\u00e9, ce qui augmente m\u00e9caniquement <code>min_zone</code> \u2014 donc la\nvaleur des renards \u2014 sans coder le renard en dur.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "SFPL",
+      "code_hash": "70961fc5d21f3bdcf7759cb5dc444893",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h3 id=\"politique-maskableppo\">Politique MaskablePPO</h3>\n<ul>\n<li><code>MultiInputPolicy</code> (Dict d'observations \u2192 logits masqu\u00e9s)</li>\n<li><code>net_arch = {'pi': [256, 256], 'vf': [256, 256]}</code></li>\n<li><code>features_extractor</code> : d\u00e9faut SB3 (MultiInput, NatureCNN d\u00e9sactiv\u00e9)</li>\n<li>masque appliqu\u00e9 dans la distribution cat\u00e9gorielle</li>\n</ul></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "BYtC",
+      "code_hash": "3622e1fdb25fe4661c7610d1ede41a9e",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "RGSE",
+      "code_hash": "8ad9d54323c97d46f330f89d17880903",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "Kclp",
+      "code_hash": "ca7db17496d1f01b3cfe8550fc3cff9a",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><span class=\"paragraph\">Script \u00e9crit : <code>/home/yike-ouyang/Documents/code_perso/tres_fute/backend/rl_env_2/train_shaped.py</code></span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "emfo",
+      "code_hash": "d29a6346338a696b0266145c38f9ece6",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h3 id=\"lancement-manuel\">Lancement manuel</h3>\n<span class=\"paragraph\"><marimo-ui-element object-id='emfo-0' random-id='8cc3ac9b-50d3-962a-ac7d-8999abbf8ab4'><marimo-button data-initial-value='0' data-label='&quot;&#92;u003cspan class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&#92;u003e&#92;u003cspan class=&#92;&quot;paragraph&#92;&quot;&#92;u003eLancer l&#x27;entra\u00eenement (3 \u00d7 2,000,000 pas)&#92;u003c/span&#92;u003e&#92;u003c/span&#92;u003e&quot;' data-kind='&quot;neutral&quot;' data-disabled='false' data-full-width='false'></marimo-button></marimo-ui-element></span>\n<span class=\"paragraph\">Aucun entra\u00eenement ne d\u00e9marre \u00e0 l'ouverture du notebook : clique sur le\nbouton pour lancer les runs <code>min_zone</code>, <code>pbrs</code> et <code>variance</code>.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "Hstk",
+      "code_hash": "cee9ff23a19962397b380fbe32f7f720",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "nWHF",
+      "code_hash": "fce2cef10e38d4228bf28515c1702323",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h3 id=\"entrainement-lance\">Entra\u00eenement lanc\u00e9</h3>\n<ul>\n<li>PID              : <strong>2129699</strong></li>\n<li>Log              : <code>/home/yike-ouyang/Documents/code_perso/tres_fute/backend/runs/shaped_20260917_203604/training.log</code></li>\n<li>Sortie TensorBoard : <code>/home/yike-ouyang/Documents/code_perso/tres_fute/backend/runs/shaped_20260917_203604</code></li>\n<li>Statut           : <strong>en cours</strong></li>\n</ul>\n<span class=\"paragraph\">Le processus tourne ind\u00e9pendamment de marimo. Fermer l'onglet ou\nred\u00e9marrer le serveur ne l'arr\u00eate pas.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "iLit",
+      "code_hash": "d7ea9e7be4cfe5f5405c225b45ada248",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h3 id=\"tensorboard\">TensorBoard</h3>\n<span class=\"paragraph\"><marimo-ui-element object-id='iLit-0' random-id='897f3716-3117-d9b0-c687-e8665ac6f554'><marimo-button data-initial-value='0' data-label='&quot;&#92;u003cspan class=&#92;&quot;markdown prose dark:prose-invert contents&#92;&quot;&#92;u003e&#92;u003cspan class=&#92;&quot;paragraph&#92;&quot;&#92;u003eLancer TensorBoard (port 6006)&#92;u003c/span&#92;u003e&#92;u003c/span&#92;u003e&quot;' data-kind='&quot;neutral&quot;' data-disabled='false' data-full-width='false'></marimo-button></marimo-ui-element></span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "ZHCJ",
+      "code_hash": "8ab6dd0ed2fe01905cff7c02cede0f10",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "ROlb",
+      "code_hash": "e164811f8d6462070f0744084adf10a2",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><h3 id=\"tensorboard\">TensorBoard</h3>\n<span class=\"paragraph\">Ouvre <strong><a href=\"http://localhost:6006\" rel=\"noopener noreferrer\" target=\"_blank\">http://localhost:6006</a></strong> dans un navigateur.</span></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "qnkX",
+      "code_hash": "25aef76875688179097a656257dd7010",
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/markdown": "<span class=\"markdown prose dark:prose-invert contents\"><div class=\"language-scdoc highlight\"><pre><span></span><code><span class=\"gu\">##</span># M\u00e9triques (dernier best connu par run)\n\n| Run | win | draw | score | opp | fox | min_zone | zones_compl |\n</code></pre></div>\n<span class=\"paragraph\">|-----|-----|------|-------|-----|-----|----------|-------------|\n| <code>min_zone</code> | 91.50% | 0.50% | 222.4 | 177.5 | 2.83 | 15.8 | 0.00 |\n| <code>pbrs</code> | \u2014 | \u2014 | \u2014 | \u2014 | \u2014 | \u2014 | \u2014 |\n| <code>variance</code> | \u2014 | \u2014 | \u2014 | \u2014 | \u2014 | \u2014 | \u2014 |</span>\n<div class=\"language-scdoc highlight\"><pre><span></span><code><span class=\"gu\">##</span># Derni\u00e8res lignes de log\n\n<span class=\"s\">```</span>\n    |    learning_rate        | 0.0003      |\n|    loss                 | -0.0168     |\n|    n_updates            | 3692        |\n|    policy_gradient_loss | -0.00368    |\n|    policy_loss          | -0.00368    |\n|    value_loss           | 0.0153      |\n-----------------------------------------\nEarly stopping at step 1 due to reaching max kl: 0.05\n<span class=\"s\">```</span>\n</code></pre></div></span>"
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "pajy",
+      "code_hash": null,
+      "outputs": [
+        {
+          "type": "data",
+          "data": {
+            "text/plain": ""
+          }
+        }
+      ],
+      "console": []
+    },
+    {
+      "id": "daQZ",
+      "code_hash": null,
+      "outputs": [],
+      "console": []
+    }
+  ]
+}

@@ -354,9 +354,11 @@ La somme peut être inscrite dans `nextFree` si :
 
 Un 7 inscrit dans une branche **ne remet pas** le compteur de progression à zéro : la case est remplie, `ref` devient 7 pour le prochain pas.
 
+Une valeur inscrite ne peut jamais dépasser **12** : la somme vaut au plus 6 + 6. Le pas réglementaire n’est donc offert que s’il reste dans `1..12` (le pas gauche vaut au plus 6, le pas droit vaut 12 au maximum). En particulier, lorsque `ref = 12` sur la branche droite, la case suivante n’accepte plus que le 7.
+
 Si une branche est pleine, elle n’offre plus de destination.
 
-**Bonus virtuel bleu :** le joueur choisit, pour chaque branche encore ouverte, d’y inscrire soit la valeur réglementaire (`ref±1`), soit 7. Aucun dé physique n’est lu.
+**Bonus virtuel bleu :** le joueur choisit, pour chaque branche encore ouverte, d’y inscrire soit la valeur réglementaire (`ref - 1` à gauche, `ref + 1` à droite) **dans la limite des valeurs légales (`1..12`)**, soit 7. Aucun dé physique n’est lu.
 
 ### F.4 Marron (MARR-001)
 

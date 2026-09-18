@@ -11,6 +11,7 @@ Rewards belong to :mod:`rl_env.rewards`, never to the engine.
 
 from __future__ import annotations
 
+import copy
 import random
 from typing import Any
 
@@ -18,9 +19,10 @@ import numpy as np
 from gymnasium import Env, spaces
 
 from game_engine.engine import GameEngine
+from game_engine.serialize import observe as observe_state
 from simulation.policy import fingerprint
 
-from .actions import ACTION_VERSION, N_ACTIONS, decode, legal_action_mask
+from .actions import ACTION_VERSION, N_ACTIONS, decode, label, legal_action_mask
 from .observations import OBSERVATION_VERSION, decision_kind, encode_observation, observation_space
 from .opponents import make_opponent
 from .rewards import RewardCalculator
@@ -45,6 +47,7 @@ class DiceGameEnv(Env):
         max_steps: int | None = None,
         log_engine_actions: bool = False,
         render_mode: str | None = None,
+        trace: bool = False,
     ) -> None:
         super().__init__()
         if agent_player not in (1, 2, "random"):
@@ -58,6 +61,9 @@ class DiceGameEnv(Env):
         self.max_steps = max_steps
         self.log_engine_actions = log_engine_actions
         self.render_mode = render_mode
+        # When enabled, every atomic engine action applied is recorded (see ``_apply``).
+        self.trace_enabled = trace
+        self.trace: list[dict[str, Any]] = []
 
         self.action_space = spaces.Discrete(N_ACTIONS)
         self.observation_space = observation_space()
@@ -112,6 +118,8 @@ class DiceGameEnv(Env):
         self._steps = 0
         self._applied = 0
         self._opponent_applied = 0
+        self.trace = []
+        self.trace_initial = observe_state(self.engine.state)["state"] if self.trace_enabled else None
 
         self._advance_until_agent_or_done()
         self._score_at_observation = self._agent_score()
@@ -137,8 +145,9 @@ class DiceGameEnv(Env):
 
         assert self.engine is not None
         sequence = decode(self.engine.state, action_id)
-        for action in sequence:
-            self._apply(action, by_opponent=False)
+        rl_info = {"id": action_id, "label": label(action_id)}
+        for i, action in enumerate(sequence):
+            self._apply(action, role="agent", rl=rl_info if i == 0 else None)
 
         self._advance_until_agent_or_done()
         self._steps += 1
@@ -158,17 +167,40 @@ class DiceGameEnv(Env):
 
     # ------------------------------------------------------------------ driving
 
-    def _apply(self, action: dict[str, Any], *, by_opponent: bool) -> None:
+    def _apply(self, action: dict[str, Any], *, role: str, rl: dict[str, Any] | None = None) -> None:
+        """Apply one atomic engine action.
+
+        ``role`` is ``"agent"``, ``"opponent"`` or ``"auto"`` (forced/technical).
+        When tracing is enabled, the atomic transition is appended to ``self.trace``.
+        """
         assert self.engine is not None
+        decision_before = self._current_kind()
+        actor_before = self.engine.current_decision().get("actor")
         before = fingerprint(self.engine.state)
         events = self.engine.step(action)
         if not events:
-            raise RuntimeError(f"engine rejected action {action!r} during {self._current_kind()}")
+            raise RuntimeError(f"engine rejected action {action!r} during {decision_before}")
         if fingerprint(self.engine.state) == before:
             raise RuntimeError(f"{_NO_PROGRESS}: {action!r}")
         self._applied += 1
-        if by_opponent:
+        if role == "opponent":
             self._opponent_applied += 1
+        if self.trace_enabled:
+            view = observe_state(self.engine.state)
+            self.trace.append(
+                {
+                    "index": len(self.trace),
+                    "role": role,
+                    "actor": actor_before,
+                    "decision_kind": decision_before,
+                    "action": copy.deepcopy(action),
+                    "state": view["state"],
+                    "decision": view["decision"],
+                    "scores": view["scores"],
+                    "message": view["state"].get("message"),
+                    "rl": copy.deepcopy(rl),
+                }
+            )
 
     def _advance_until_agent_or_done(self) -> None:
         assert self.engine is not None
@@ -181,7 +213,7 @@ class DiceGameEnv(Env):
                 raise RuntimeError(f"{_NO_ACTION_LIMIT} ({self._current_kind()})")
             if len(legal) == 1:
                 # Forced or purely technical command: apply automatically.
-                self._apply(legal[0], by_opponent=False)
+                self._apply(legal[0], role="auto")
                 continue
             actor = self.engine.current_decision().get("actor")
             if actor == self.agent_player:
@@ -200,7 +232,7 @@ class DiceGameEnv(Env):
             action = self.opponent.act(self.engine.state)
             if action is None:
                 raise RuntimeError("opponent returned no action")
-            self._apply(action, by_opponent=True)
+            self._apply(action, role="opponent")
         raise RuntimeError("internal loop exceeded MAX_INTERNAL_STEPS (possible engine inconsistency)")
 
     # ------------------------------------------------------------------ spaces

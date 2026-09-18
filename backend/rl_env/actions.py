@@ -20,10 +20,10 @@ Layout of the ``Discrete(N_ACTIONS)`` space (see the README for the full table):
     JOKER_VALUE         99 .. 104    joker value 1..6
     BONUS_COLOR        105 .. 109    black-bonus acting colour
     BONUS_VALUE        110 .. 115    bonus value 1..6
-    BLUE_BONUS_PLACE   116 .. 284    (blue cell 1..13) x (value 1..13)
-    TURQUOISE_BONUS    285 .. 314    immediate turquoise bonus cell (r,c)
-    UTILITY            315 .. 322    relance/joker/plus1/pass/continue/fill helpers
-    FILL_SLOT          323 .. 328    filler die colour
+    BLUE_BONUS_PLACE   116 .. 271    (blue cell 1..13) x (value 1..12)
+    TURQUOISE_BONUS    272 .. 301    immediate turquoise bonus cell (r,c)
+    UTILITY            302 .. 309    relance/joker/plus1/pass/continue/fill helpers
+    FILL_SLOT          310 .. 315    filler die colour
 """
 
 from __future__ import annotations
@@ -35,7 +35,7 @@ import numpy as np
 from game_engine.legal import legal_actions
 from game_engine.types import ACTING_COLORS, ALL_DIE_COLORS, Action, GameState
 
-ACTION_VERSION = "1.0"
+ACTION_VERSION = "1.1"
 
 # --- id sections -----------------------------------------------------------
 
@@ -84,14 +84,15 @@ BONUS_VALUE_COUNT = 6
 BONUS_VALUE_MAX = 6
 
 BLUE_BONUS_OFFSET = BONUS_VALUE_OFFSET + BONUS_VALUE_COUNT  # 116
-BLUE_BONUS_VALUE_MAX = 13  # 1..13, the engine only proposes legal pairs
-BLUE_BONUS_COUNT = BLUE_COUNT * BLUE_BONUS_VALUE_MAX  # 169
+# A blue sum is at most 12; the engine never proposes a higher (cell, value) pair.
+BLUE_BONUS_VALUE_MAX = 12
+BLUE_BONUS_COUNT = BLUE_COUNT * BLUE_BONUS_VALUE_MAX  # 156
 
-TURQUOISE_BONUS_OFFSET = BLUE_BONUS_OFFSET + BLUE_BONUS_COUNT  # 285
+TURQUOISE_BONUS_OFFSET = BLUE_BONUS_OFFSET + BLUE_BONUS_COUNT  # 272
 TURQUOISE_BONUS_CELLS = [f"turquoise-r{r}-c{c}" for r in TURQUOISE_ROWS for c in range(1, 7)]
 TURQUOISE_BONUS_COUNT = len(TURQUOISE_BONUS_CELLS)  # 30
 
-UTILITY_OFFSET = TURQUOISE_BONUS_OFFSET + TURQUOISE_BONUS_COUNT  # 315
+UTILITY_OFFSET = TURQUOISE_BONUS_OFFSET + TURQUOISE_BONUS_COUNT  # 302
 UTILITY_KINDS = (
     "use_relance",
     "start_joker",
@@ -104,10 +105,10 @@ UTILITY_KINDS = (
 )
 UTILITY_COUNT = len(UTILITY_KINDS)  # 8
 
-FILL_SLOT_OFFSET = UTILITY_OFFSET + UTILITY_COUNT  # 323
+FILL_SLOT_OFFSET = UTILITY_OFFSET + UTILITY_COUNT  # 310
 FILL_SLOT_COUNT = len(ALL_DIE_COLORS)  # 6
 
-N_ACTIONS = FILL_SLOT_OFFSET + FILL_SLOT_COUNT  # 329
+N_ACTIONS = FILL_SLOT_OFFSET + FILL_SLOT_COUNT  # 316
 
 _UTILITY_INDEX = {name: i for i, name in enumerate(UTILITY_KINDS)}
 _DEST_LAYOUT = {

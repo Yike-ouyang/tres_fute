@@ -145,7 +145,7 @@ def observation_space() -> spaces.Dict:
             "brown_checks": spaces.MultiBinary([N_PLAYERS, BROWN_SIZE]),
             "brown_last_checked": spaces.Box(0, 12, (N_PLAYERS,), dtype=int16),
             "brown_disabled": spaces.MultiBinary([N_PLAYERS, BROWN_SIZE]),
-            "pink_values": spaces.Box(0, 12, (N_PLAYERS, PINK_SIZE), dtype=int16),
+            "pink_values": spaces.Box(0, 18, (N_PLAYERS, PINK_SIZE), dtype=int16),
             "bonuses": spaces.Box(0, 7, (N_PLAYERS, 6), dtype=int16),
             "slots_unlocked": spaces.MultiBinary([N_PLAYERS, SLOTS_SIZE]),
             "chosen_count": spaces.Box(0, CHOSEN_CAP, (N_PLAYERS,), dtype=int8),

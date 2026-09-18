@@ -137,6 +137,42 @@ def test_n07_blue_wildcard_7_restarts_branch():
     assert any(o["cell_id"] == "blue-cell-10" and o["value"] == 7 for o in opts2)
 
 
+def test_blue_bonus_stepped_value_allowed_up_to_12():
+    from game_engine.rules import blue_bonus_options
+
+    # ref = 11 on the right branch: the stepped value 12 is still legal alongside 7.
+    board = empty_board()
+    board["values"] = {f"blue-cell-{p}": p for p in range(8, 12)}  # 8,9,10,11
+    opts = blue_bonus_options(board)
+    assert {"cell_id": "blue-cell-12", "value": 12} in opts
+    assert {"cell_id": "blue-cell-12", "value": 7} in opts
+
+
+def test_blue_bonus_never_exceeds_12():
+    from game_engine.rules import blue_bonus_options
+
+    # ref = 12 on the right branch: 13 is impossible (a sum is at most 12), only 7.
+    board = empty_board()
+    board["values"] = {f"blue-cell-{p}": p for p in range(8, 13)}  # 8..12
+    opts = blue_bonus_options(board)
+    assert {"cell_id": "blue-cell-13", "value": 7} in opts
+    assert all(o["value"] <= 12 for o in opts)
+    assert not any(o["cell_id"] == "blue-cell-13" and o["value"] == 13 for o in opts)
+
+
+def test_blue_bonus_options_are_within_1_to_12():
+    from game_engine.rules import blue_bonus_options
+
+    boards = []
+    for filled in range(0, 7):  # right branch filled with increasing values
+        b = empty_board()
+        b["values"] = {f"blue-cell-{p}": p for p in range(8, 8 + filled)}
+        boards.append(b)
+    for b in boards:
+        for o in blue_bonus_options(b):
+            assert 1 <= o["value"] <= 12
+
+
 def test_n08_brown_skipped_cells():
     state = base_state(
         dice=all_dice({"brown": {"value": 4, "location": "available"}}),

@@ -83,9 +83,34 @@ L’avance rapide utilise `HeuristicPolicy` (`simulation/policy.py`) : elle appl
 | `POST` | `/games/{id}/actions` | `{command_id, expected_version, action}` |
 | `POST` | `/games/{id}/reset` | Nouvelle partie, même contrat |
 | `POST` | `/games/{id}/advance` | `{n, command_id, expected_version}` — autoplay en tâche de fond |
+| `GET` | `/replays` | Parties rejouables (traces JSON pré-générées) |
+| `GET` | `/replays/{id}` | Trace complète d’une partie rejouée |
 | `GET` | `/health` | OK |
 
 Une commande répétée (`command_id`) renvoie le résultat déjà produit. Une `expected_version` dépassée répond `409` avec l’état courant. Pendant une avance, les actions manuelles répondent `409`.
+
+## Replay d’un modèle entraîné
+
+Un checkpoint ne contient pas la partie, mais l’environnement est déterministe :
+on la régénère à l’identique depuis la graine d’évaluation.
+
+```bash
+cd backend
+python rl_env/replay.py --run runs/essai_01 --checkpoint best_model.zip --seed 1000000 --agent-player 1
+```
+
+La trace (états sérialisés, actions atomiques, résumé d’observation) est servie
+par `GET /replays` et visualisée dans l’onglet **Replay** du front (flèches
+avant/arrière). Détails : `rl_env/README.md` §16.
+
+Pour un modèle `rl_env_2` (adversaire checkpoint, observation/action 2.0), la
+même trace minimale est produite par `watch_best_model.py` et écrite dans
+`runs/<run>/replays/` (découvert par `GET /replays`) :
+
+```bash
+cd backend
+python rl_env_2/watch_best_model.py --model runs/solo_<ts>/score_delta_solo/best_model.zip --seed 2000000
+```
 
 ## Environnement RL (Gymnasium)
 

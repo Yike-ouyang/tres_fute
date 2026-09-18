@@ -21,6 +21,9 @@ from .types import (
 TURQUOISE_ROWS = [1, 2, 3, 4, 5]
 BLUE_RIGHT = [8, 9, 10, 11, 12, 13]
 BLUE_LEFT = [6, 5, 4, 3, 2, 1]
+# A blue sum is darkblue + white, at most 6 + 6. An inscribed value can therefore
+# never exceed 12: the stepped bonus value (ref+1) is dropped above it.
+BLUE_MAX_VALUE = 12
 
 PASSIVE_YELLOW_CELL: dict[int, str] = {
     1: "yellow-r3-c1",
@@ -182,11 +185,18 @@ def bonus_brown_legal(board: PlayerBoard, value: int) -> list[str]:
 
 
 def blue_bonus_options(board: PlayerBoard) -> list[BlueBonusOption]:
+    """Regulation value into the next-free cell of each open branch, or the wildcard 7.
+
+    The stepped value (``ref-1`` left / ``ref+1`` right) is only offered when it stays
+    within the legal range ``1..BLUE_MAX_VALUE``; above it (``ref = 12`` on the right)
+    the branch only accepts the wildcard ``7``. A blue sum is at most 12, so no
+    inscribed value can exceed it.
+    """
     values = board["values"]
     options: list[BlueBonusOption] = []
 
     def push(cell_id: str | None, value: int) -> None:
-        if not cell_id or value < 1:
+        if not cell_id or value < 1 or value > BLUE_MAX_VALUE:
             return
         if any(o["cell_id"] == cell_id and o["value"] == value for o in options):
             return

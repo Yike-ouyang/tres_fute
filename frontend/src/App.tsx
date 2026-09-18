@@ -7,6 +7,7 @@ import GameControls from "./components/GameControls";
 import BonusResolutionPanel from "./components/BonusResolutionPanel";
 import PinkChoiceDialog from "./components/PinkChoiceDialog";
 import ScoreTable from "./components/ScoreTable";
+import ReplayView from "./components/ReplayView";
 import Die from "./components/Die";
 import {
   ApiError,
@@ -30,6 +31,7 @@ const JOKER_VALUES = [1, 2, 3, 4, 5, 6];
 const EMPTY_SET = new Set<string>();
 
 function App() {
+  const [view, setView] = useState<"live" | "replay">("live");
   const [snap, setSnap] = useState<GameSnapshot | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -137,10 +139,40 @@ function App() {
   const legalSet = useMemo(() => new Set(snap?.state.selection?.legal ?? []), [snap]);
   const pickedSet = useMemo(() => new Set(snap?.state.selection?.picked ?? []), [snap]);
 
+  const viewTabs = (
+    <nav className="view-tabs" aria-label="Choix de la vue">
+      <button
+        type="button"
+        className={`btn btn-tab${view === "live" ? " is-active" : ""}`}
+        onClick={() => setView("live")}
+      >
+        Partie
+      </button>
+      <button
+        type="button"
+        className={`btn btn-tab${view === "replay" ? " is-active" : ""}`}
+        onClick={() => setView("replay")}
+      >
+        Replay
+      </button>
+    </nav>
+  );
+
+  if (view === "replay") {
+    return (
+      <div className="board">
+        <h1 className="board-title">Plateau de dés — Duel à deux joueurs</h1>
+        {viewTabs}
+        <ReplayView />
+      </div>
+    );
+  }
+
   if (!snap) {
     return (
       <div className="board">
         <h1 className="board-title">Plateau de dés — Duel à deux joueurs</h1>
+        {viewTabs}
         <p className="game-message" role="status">
           {error ?? "Connexion au moteur de règles…"}
         </p>
@@ -192,6 +224,7 @@ function App() {
   return (
     <div className="board">
       <h1 className="board-title">Plateau de dés — Duel à deux joueurs</h1>
+      {viewTabs}
 
       {error && (
         <div className="game-message" role="alert">

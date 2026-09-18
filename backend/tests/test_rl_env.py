@@ -61,6 +61,8 @@ def test_observation_dimensions_and_bounds_are_stable():
     assert space["yellow_checks"].shape == (2, 18)
     assert space["turquoise_checks"].shape == (2, 30)
     assert space["blue_values"].shape == (2, 13)
+    assert int(space["blue_values"].high.max()) == 12
+    assert int(space["pink_values"].high.max()) == 18
     assert space["brown_checks"].shape == (2, 12)
     assert space["pink_values"].shape == (2, 12)
     assert space["slots_unlocked"].shape == (2, 58)
@@ -93,10 +95,29 @@ def test_observation_agent_first_is_constant_across_roles():
 # ------------------------------------------------------------------- actions
 
 def test_action_catalogue_size_and_labels():
-    assert N_ACTIONS == 329
+    assert N_ACTIONS == 316
     assert 0 <= encode(GameEngine(seed=1).state, {"type": "select_die", "color": "yellow"}) < N_ACTIONS
-    for aid in (0, 5, 11, 29, 60, 73, 85, 97, 99, 105, 110, 116, 285, 315, 323):
+    for aid in (0, 5, 11, 29, 60, 73, 85, 97, 99, 105, 110, 116, 271, 272, 301, 302, 309, 310, 315):
         assert isinstance(label(aid), str) and label(aid)
+
+
+def test_blue_values_never_exceed_12_in_practice():
+    """A blue bonus at ref=12 must only offer the wildcard 7 (no 13)."""
+    from game_engine.rules import blue_bonus_options
+    from rl_env.observations import encode_observation
+
+    board = empty_board()
+    board["values"] = {f"blue-cell-{p}": p for p in range(8, 13)}  # 8..12
+    options = blue_bonus_options(board)
+    assert all(o["value"] <= 12 for o in options)
+    assert not any(o["value"] == 13 for o in options)
+
+    # applying the legal 7 option keeps the observation inside its declared space
+    written = {**board["values"], "blue-cell-13": 7}
+    state = base_state(boards={1: {**empty_board(), "values": written}, 2: empty_board()})
+    obs = encode_observation(state, 1)
+    assert observation_space().contains(obs)
+    assert int(obs["blue_values"].max()) == 12
 
 
 def test_action_encode_decode_roundtrip():

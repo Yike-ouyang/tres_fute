@@ -196,8 +196,8 @@ contains RNG internals or future rolls.
 
 ## 5. Action catalogue
 
-`action_space = Discrete(N_ACTIONS)` with **`N_ACTIONS = 329`** and
-`ACTION_VERSION = "1.0"`. Ids are semantic and stable across states, episodes
+`action_space = Discrete(N_ACTIONS)` with **`N_ACTIONS = 316`** and
+`ACTION_VERSION = "1.1"`. Ids are semantic and stable across states, episodes
 and instances: they are never "the index of the current legal-action list".
 
 | Section | Ids | Count | Decodes to |
@@ -213,10 +213,10 @@ and instances: they are never "the index of the current legal-action list".
 | `JOKER_VALUE` | 99–104 | 6 | `set_joker_value` 1..6 |
 | `BONUS_COLOR` | 105–109 | 5 | `choose_bonus_color` (black bonus) |
 | `BONUS_VALUE` | 110–115 | 6 | `choose_bonus_value` 1..6 |
-| `BLUE_BONUS_PLACE` | 116–284 | 169 | `place_bonus_blue` `(cell 1..13) × (value 1..13)` |
-| `TURQUOISE_BONUS` | 285–314 | 30 | immediate turquoise bonus cell (+ `confirm_move`) |
-| `UTILITY` | 315–322 | 8 | `use_relance`, `start_joker`, `begin_plus1`, `skip_plus1`, `end_active_early`, `pass_passive`, `dismiss_impossible_bonus`, `continue` |
-| `FILL_SLOT` | 323–328 | 6 | `fill_slot_dummy` per die colour |
+| `BLUE_BONUS_PLACE` | 116–271 | 156 | `place_bonus_blue` `(cell 1..13) × (value 1..12)` |
+| `TURQUOISE_BONUS` | 272–301 | 30 | immediate turquoise bonus cell (+ `confirm_move`) |
+| `UTILITY` | 302–309 | 8 | `use_relance`, `start_joker`, `begin_plus1`, `skip_plus1`, `end_active_early`, `pass_passive`, `dismiss_impossible_bonus`, `continue` |
+| `FILL_SLOT` | 310–315 | 6 | `fill_slot_dummy` per die colour |
 
 Notes:
 
@@ -397,8 +397,10 @@ environment strict.
 - **Pending bonus queue** is capped at 8 (`PENDING_BONUS_CAP`); the measured
   maximum is 2. If the cap were ever exceeded, the encoder raises instead of
   silently truncating.
-- **Blue bonus placement** enumerates `(cell 1..13) × (value 1..13)` = 169 ids.
-  Only legal pairs are ever unmasked.
+- **Blue bonus placement** enumerates `(cell 1..13) × (value 1..12)` = 156 ids.
+  A blue sum is at most 12, so the regulation stepped value is dropped above it
+  (at `ref = 12` the right branch only accepts the wildcard `7`). Only legal pairs
+  are ever unmasked.
 - **`flatten` of the observation** is a flat `Dict`; two-player fields use a
   leading axis (agent first), which keeps the point of view constant when roles
   swap.
@@ -427,3 +429,49 @@ handled.
 - A change to `N_ACTIONS` invalidates trained models: retrain or remap.
 - The engine's `GameEngine(log_actions=...)` flag is the minimal, documented
   switch used to disable its action journal during training.
+
+## 16. Replay viewer (exact games from a checkpoint)
+
+A checkpoint does not store a game, but the environment is deterministic given
+the eval seed, so an episode can be regenerated **exactly**:
+
+```bash
+cd backend
+python rl_env/replay.py --run runs/essai_01 --checkpoint best_model.zip \
+    --seed 1000000 --agent-player 1          # or --episode N / --all-best-block
+```
+
+`rl_env/replay.py` loads the checkpoint, replays it deterministically with masks
+on the logged eval seed, verifies the checkpoint metadata (`action_version`,
+`observation_version`, `n_actions`), and writes:
+
+- `<run>/replays/<id>.json` — one JSON trace: `initial_state`, then one **atomic**
+  frame per engine action (`role` = `agent` / `opponent` / `auto`, `actor`,
+  `decision_kind`, `action`, `state`, `scores`, `message`); agent-decision frames
+  also carry `rl` (action id + label), `legal_actions` (labels) and
+  `observation_summary` (readable summary of the numeric observation).
+- `<run>/replays/index.json` — manifest.
+
+The frontend fetches these through the read-only API (no ML dependency in the
+API process):
+
+| Route | Role |
+| --- | --- |
+| `GET /replays` | list available replays (all run manifests) |
+| `GET /replays/{id}` | full trace for one replay |
+
+Set `TRES_FUTE_RUNS_DIR` to override the scanned directory. In the web UI, the
+**Replay** tab shows both boards and the shared dice, with ◀/▶ arrows (and
+`←`/`→`), a slider and "décision précédente/suivante" jumps, plus the action and
+observation-summary panels.
+
+Replays are tied to the rules/observation/action versions of the code that
+produced the checkpoint; regenerate them after any such change.
+
+### Démonstration rapide
+
+```bash
+cd backend && python rl_env/replay.py --seed 1000000 --agent-player 1
+uvicorn api.app:app --reload &
+cd ../frontend && npm run dev      # onglet « Replay »
+```

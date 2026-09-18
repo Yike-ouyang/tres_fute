@@ -36,6 +36,8 @@ export interface MoveContext {
 const TURQUOISE_ROWS = [1, 2, 3, 4, 5];
 const BLUE_RIGHT = [8, 9, 10, 11, 12, 13];
 const BLUE_LEFT = [6, 5, 4, 3, 2, 1];
+/** Blue sum = darkblue + white, at most 6 + 6; an inscribed value never exceeds 12. */
+const BLUE_MAX_VALUE = 12;
 
 /** Passive-yellow destination per die value: manche is irrelevant. */
 const PASSIVE_YELLOW_CELL: Record<number, string> = {
@@ -220,14 +222,14 @@ export interface BlueBonusOption {
 
 /**
  * Dark-blue bonus die: write a regulation value into the next-free cell of either
- * branch. Each open branch accepts its stepped value (ref-1 left / ref+1 right)
- * and the wildcard 7.
+ * branch. Each open branch accepts its stepped value (ref-1 left / ref+1 right),
+ * but only within 1..BLUE_MAX_VALUE, and the wildcard 7.
  */
 export function blueBonusOptions(board: PlayerBoard): BlueBonusOption[] {
   const values = board.values;
   const options: BlueBonusOption[] = [];
   const push = (cellId: string | null, value: number) => {
-    if (!cellId || value < 1) return;
+    if (!cellId || value < 1 || value > BLUE_MAX_VALUE) return;
     if (options.some((o) => o.cellId === cellId && o.value === value)) return;
     options.push({ cellId, value });
   };
