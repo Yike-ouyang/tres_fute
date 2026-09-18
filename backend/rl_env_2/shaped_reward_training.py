@@ -684,7 +684,7 @@ def _(OUTPUT_DIR, RUN_TENSORBOARD, mo, subprocess):
     try:
         TB_PROC = subprocess.Popen(
             ["tensorboard", "--logdir", str(OUTPUT_DIR),
-             "--port", str(TB_PORT), "--host", "0.0.0.0"],
+             "--port", str(TB_PORT), "--host", "127.0.0.1"],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             start_new_session=True,
