@@ -77,3 +77,34 @@ def test_empty_runs_dir_lists_nothing(tmp_path, monkeypatch):
     monkeypatch.setenv("TRES_FUTE_RUNS_DIR", str(empty))
     client = _client()
     assert client.get("/replays").json() == {"replays": []}
+
+
+def test_top_level_run_replay_is_served(tmp_path, monkeypatch):
+    # A run may live directly under the base dir (agent/<run>/replays), not only agent/runs/.
+    replays = tmp_path / "toprun" / "replays"
+    replays.mkdir(parents=True)
+    (replays / "trace.json").write_text(json.dumps({"seed": 2, "frames": []}), encoding="utf-8")
+    (replays / "index.json").write_text(
+        json.dumps(
+            {
+                "replays": [
+                    {
+                        "id": "toprun__best_model_seed2_p1",
+                        "run": "toprun",
+                        "checkpoint": "best_model.zip",
+                        "seed": 2,
+                        "agent_player": 1,
+                        "file": "trace.json",
+                        "agent_decisions": 0,
+                        "frames": 0,
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("TRES_FUTE_RUNS_DIR", str(tmp_path))
+    client = _client()
+    ids = [r["id"] for r in client.get("/replays").json()["replays"]]
+    assert "toprun__best_model_seed2_p1" in ids
+    assert client.get("/replays/toprun__best_model_seed2_p1").status_code == 200

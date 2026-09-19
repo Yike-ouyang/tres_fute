@@ -1,6 +1,6 @@
 # Backend Très Futé (moteur Python + FastAPI)
 
-Les règles (REGLES_DU_JEU.md v1.1) vivent uniquement dans `game_engine/`.
+Les règles (REGLES_DU_JEU.md v1.2) vivent uniquement dans `game_engine/`.
 FastAPI transporte l’état ; `simulation/` joue des parties sans HTTP.
 
 ## Limites (à lire avant de lancer)
@@ -12,18 +12,20 @@ FastAPI transporte l’état ; `simulation/` joue des parties sans HTTP.
 
 ## Installation
 
+Venv **partagé à la racine du dépôt** (utilisé par `backend/` et `agent/`) :
+
 ```bash
-cd backend
-python3 -m venv .venv
+cd <racine du dépôt>          # dossier qui contient backend/ et agent/
+uv venv .venv --python 3.12
 source .venv/bin/activate
-pip install -r requirements.txt
+uv pip install -r backend/requirements.txt
 ```
 
 ## Lancer l’API
 
 ```bash
 cd backend
-source .venv/bin/activate
+source ../.venv/bin/activate
 uvicorn api.app:app --reload --host 127.0.0.1 --port 8000
 ```
 
@@ -53,7 +55,7 @@ VITE_API_URL=http://127.0.0.1:8000 npm run dev
 
 ```bash
 cd backend
-source .venv/bin/activate
+source ../.venv/bin/activate
 pytest
 ```
 
@@ -63,7 +65,7 @@ Le front conserve des tests Vitest du moteur TypeScript historique (`npm test` d
 
 ```bash
 cd backend
-source .venv/bin/activate
+source ../.venv/bin/activate
 python simulation/run_game.py --seeds 1,2,3 --turns 6
 ```
 
@@ -95,30 +97,30 @@ Un checkpoint ne contient pas la partie, mais l’environnement est déterminist
 on la régénère à l’identique depuis la graine d’évaluation.
 
 ```bash
-cd backend
-python rl_env/replay.py --run runs/essai_01 --checkpoint best_model.zip --seed 1000000 --agent-player 1
+# depuis la racine du dépôt, venv partagé activé
+python agent/rl_env/replay.py --run agent/runs/essai_01 --checkpoint best_model.zip --seed 1000000 --agent-player 1
 ```
 
 La trace (états sérialisés, actions atomiques, résumé d’observation) est servie
 par `GET /replays` et visualisée dans l’onglet **Replay** du front (flèches
-avant/arrière). Détails : `rl_env/README.md` §16.
+avant/arrière). Détails : `agent/rl_env/README.md` §16.
 
 Pour un modèle `rl_env_2` (adversaire checkpoint, observation/action 2.0), la
 même trace minimale est produite par `watch_best_model.py` et écrite dans
-`runs/<run>/replays/` (découvert par `GET /replays`) :
+`agent/runs/<run>/replays/` (découvert par `GET /replays`) :
 
 ```bash
-cd backend
-python rl_env_2/watch_best_model.py --model runs/solo_<ts>/score_delta_solo/best_model.zip --seed 2000000
+# depuis la racine du dépôt, venv partagé activé
+python agent/rl_env_2/watch_best_model.py --model agent/runs/solo_<ts>/score_delta_solo/best_model.zip --seed 2000000
 ```
 
 ## Environnement RL (Gymnasium)
 
-`rl_env/` expose la partie complète à deux joueurs comme environnement Gymnasium (agent appris contre adversaire fixe, sans HTTP). Voir `rl_env/README.md`. Démonstration :
+`agent/rl_env/` expose la partie complète à deux joueurs comme environnement Gymnasium (agent appris contre adversaire fixe, sans HTTP). Voir `agent/rl_env/README.md`. Démonstration :
 
 ```bash
-cd backend && source .venv/bin/activate
-python rl_env/run_episode.py --episodes 3 --agent-player random --opponent heuristic
+# depuis la racine du dépôt, venv partagé activé
+python agent/rl_env/run_episode.py --episodes 3 --agent-player random --opponent heuristic
 ```
 
 `gymnasium` et `numpy` sont dans `requirements.txt` ; `sb3-contrib` (MaskablePPO) est optionnel.

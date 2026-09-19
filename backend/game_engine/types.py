@@ -39,7 +39,7 @@ PLAYER_IDS: tuple[PlayerId, ...] = (1, 2)
 
 BROWN_NUMBERS: tuple[int, ...] = (1, 5, 3, 4, 2, 6, 4, 5, 2, 1, 6, 3)
 
-RULES_VERSION = "1.1"
+RULES_VERSION = "1.2"
 
 
 def other_player(player: PlayerId) -> PlayerId:
@@ -64,6 +64,8 @@ def effective_value(die: DieRuntime | dict[str, Any]) -> int:
 class BonusTally(TypedDict):
     unlocked: int
     used: int
+    # Consumed joker token indices (joker only); absent means none consumed.
+    used_tokens: NotRequired[list[int]]
 
 
 class BonusState(TypedDict):

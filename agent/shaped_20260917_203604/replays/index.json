@@ -1,0 +1,20 @@
+{
+  "replays": [
+    {
+      "id": "shaped_20260917_203604_run_min_zone__best_model_seed2000000_p1",
+      "run": "shaped_20260917_203604/run_min_zone",
+      "checkpoint": "best_model.zip",
+      "seed": 2000000,
+      "agent_player": 1,
+      "file": "shaped_20260917_203604_run_min_zone__best_model_seed2000000_p1.json",
+      "agent_decisions": 93,
+      "frames": 243,
+      "final_scores": {
+        "agent": 233,
+        "adversary": 127
+      },
+      "result": "win"
+    }
+  ],
+  "generated_at": "2026-09-19T08:16:49.998567+00:00"
+}

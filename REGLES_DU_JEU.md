@@ -7,7 +7,7 @@
 | Jeu | Variante à **deux joueurs** du jeu de dés « Très Futé », jouée sur le même écran. |
 | Objectif du document | Spécification normative permettant d’implémenter un moteur Python indépendant du front React et de FastAPI. |
 | Date | 14 septembre 2026 |
-| Version des règles | **1.1** |
+| Version des règles | **1.2** |
 | Statut | Spécification de **notre variante**. Ce n’est pas le règlement commercial officiel. |
 
 **Sources effectivement consultées**
@@ -39,6 +39,9 @@
 | Turquoise passif/+1 : toujours compter le carré gris, même pour un dé actif ([`prompt/7optimisation.md`](prompt/7optimisation.md)) | TURQ-002 (groupe du dé joué) |
 | Un seul +1 par joueur et par fenêtre | PLUS1-001 (enchaînement jusqu’à passer) |
 | Compteurs joker/+1 de 6 cases ; dé marron à 4 jokers | Pistes de 7 ; dé marron et dé rose au 7e ; renard au 7e relance |
+| Joker forcé dans l’ordre (`tokenIndex = used`), valeur figée par l’index | JOKER-001 v1.2 : valeur choisie, jetons utilisables **dans n’importe quel ordre** |
+| Joker en phase `active` uniquement (O-04) | JOKER-002 v1.2 : utilisable en `active`, `passive`, `+1` et `fill-slots` |
+| +1 sur tout dé, `location` indifférente | PLUS1-001 v1.2 : uniquement les dés `chosen` (joueur actif) + `discarded` (gris) |
 
 ---
 
@@ -432,23 +435,25 @@ Une piste de 7 cases est saturée à `unlocked = 7` ; les récompenses de fin se
 
 ### G.2 Joker chiffre (JOKER-001 … JOKER-005)
 
-| Index d’utilisation (ordre de déblocage) | Valeur du jeton |
-| --------------------------------------- | --------------- |
+| Index du jeton | Valeur imprimée |
+| -------------- | --------------- |
 | 0 | 3 |
 | 1 | 4 |
 | 2 | 5 |
 | 3 | 6 |
 | ≥ 4 | Au choix 1…6 (joker « wild ») |
 
-On ne peut utiliser que le **prochain** jeton (`tokenIndex = used`). L’éventuel champ `tokenIndex` d’une action React est ignoré : le moteur doit toujours consommer `used`.
+**JOKER-001 (v1.2)** : les jetons peuvent être consommés **dans n’importe quel ordre**. Le joueur choisit la **valeur** au démarrage du joker ; le moteur consomme le jeton débloqué non consommé correspondant (`available_joker_values` : valeurs des jetons débloqués non utilisés ; un jeton wild offre 1…6, et le jeton numéroté est prioritaire). `used` reste le nombre de jetons consommés ; `used_tokens` mémorise les indices.
 
 | | |
 | --- | --- |
-| Fenêtre | Phase `active` uniquement (code). Hors phase active : refusé. **À confirmer** (O-04). |
-| Paramètres | Jeton wild : choisir 1…6 avant le dé. Puis choisir un dé **disponible**. |
-| Consommation | Au `SELECT_DIE` qui applique le jeton (`used += 1`, `jokerValue` posé). |
+| Fenêtre | `active`, `passive`, `+1` **et** `fill-slots` : utilisable dès qu’il y a des dés à choisir (résout O-04). |
+| Paramètres | Choisir d’abord une valeur (valeurs disponibles), puis choisir un dé du **pool du contexte**. |
+| Pool | `active` → dés `available` ; `passive` → `discarded` sinon `chosen` ; `+1` → `chosen`/`discarded` ; `fill-slots` → `discarded`. |
+| Consommation | Au `SELECT_DIE` qui applique le jeton (`used += 1`, `used_tokens`, `jokerValue` posé). |
 | Annulation avant application | `CANCEL_JOKER` : rien n’est consommé. |
 | Annulation après application | `CANCEL_SELECTION` **n’annule pas** le joker (JOKER-004). |
+| `fill-slots` | Le joker change la valeur du dé mais n’a **aucun effet de score** (phase sans effet plateau) ; le placement se fait via `fill_slot_dummy`. |
 
 **JOKER-002 — valeur physique vs effective**
 
@@ -468,7 +473,7 @@ On ne peut utiliser que le **prochain** jeton (`tokenIndex = used`). L’éventu
 | | |
 | --- | --- |
 | Fenêtre | Après chaque séquence active, avant le passif. L’acteur enchaîne ses +1 jusqu’à passer ou épuiser son stock. |
-| Paramètres | Choisir un dé **pas encore rejoué par ce joueur dans cette fenêtre**, tout `location`, puis jouer avec les **règles passives** (jaune passif, turquoise selon F.2). |
+| Paramètres | Choisir un dé **pas encore rejoué par ce joueur dans cette fenêtre**, parmi les dés `chosen` du **joueur actif courant** et les dés `discarded` (zone grise) — jamais les dés `available` ; puis jouer avec les **règles passives** (jaune passif, turquoise selon F.2). |
 | Consommation | Au coup +1 **validé** (`used += 1`, dé enregistré dans `plus1UsedDice[acteur]`). |
 | Annulation | Annuler la sélection remet `plus1Active` à null **sans** consommer le +1 ni enregistrer le dé ; l’acteur peut réessayer ou passer. Passer (`PLUS1_SKIP`) ne consomme pas et cède la main. |
 | Récompense de piste | Dé rose `counter-plus1-all` si `unlocked ≥ 7`. |
@@ -931,14 +936,14 @@ Légende du statut : **confirmé** = instruction utilisateur encore en vigueur ;
 | O-01 | Turquoise : groupe du dé joué | Décision du 14 sept. 2026 : compter les dés du **même groupe**. | `location` du dé sélectionné en mode passif / +1. | **Tranché.** Remplace le prompt 7 (toujours le carré gris). | `maxPick` turquoise |
 | O-02 | Taille des compteurs et « tous les +1 » | Les trois pistes ont 7 cases. La case rose 4 est la 7e source de +1. | `TOTAL_* = 7` ; dé rose / marron / renard au 7e. | **Tranché.** | BONUS-007, BONUS-008, FOX-RELANCE |
 | O-03 | Dés au +1 | Plusieurs +1 enchaînables ; chaque dé au plus une fois **par joueur**. | `plus1UsedDice` par fenêtre. | **Tranché.** | PLUS1-004 |
-| O-04 | Joker hors phase active | Non précisé dans les prompts ultérieurs. Prompt 5 : utilisable en transformant un dé, sans borner la phase. | `START_JOKER` refusé hors `active`. | **À confirmer** : passif, +1 et `fill-slots` sans joker ? | Fenêtres JOKER-001. |
+| O-04 | Joker hors phase active | Prompt 5 : utilisable en transformant un dé, sans borner la phase. | `START_JOKER` refusé hors `active`. | **Tranché (v1.2)** : utilisable en `active`, `passive`, `+1` et `fill-slots`. | Fenêtres JOKER-001. |
 | O-05 | Consommation du joker si le coup est ensuite impossible | « Ne consommer ni le dé ni la manche » si aucune destination. Rien sur le joker. | Le joker est consommé au `SELECT_DIE`, avant le test de légalité post-joker. | **À confirmer** si un joker « à blanc » doit être rendu. | Politique JOKER-004. |
 | O-06 | Générateur aléatoire | Le futur moteur doit être reproductible (prompt 8). | `Math.random()` global, sans graine. | Écart attendu : le Python doit introduire une graine par partie. | RNG-001. |
 | O-07 | Sources roses dans `applyUnlocks` | Bonus rose au moment du choix points/bonus (prompt 5c). | Prédicats `pink-*` toujours faux ; octroi uniquement via `PINK_CHOOSE` option bonus. | Cohérent avec 5c, différent d’une détection générique. À conserver. | Idempotence INV-004. |
 | O-08 | Plusieurs +1 par fenêtre | Décision du 14 sept. 2026 : enchaîner jusqu’à passer. | Même acteur ré-offert tant que `unlocked > used`. | **Tranché.** | PLUS1-001 |
 | O-09 | Persistance de `jokerValue` jusqu’au prochain relancer / nouvelle séquence | Joker « pour la valeur d’un dé ». Commentaire code : temporaire pour la séquence. | Non effacé par `CANCEL_SELECTION` ni par la fin de séquence (seulement relance des `available` ou `rollAllDice` du tour suivant). | Un dé écarté peut conserver un `jokerValue` jusqu’à la séquence suivante. | Observation et légalité turquoise/bleu au passif/+1. |
 
-Les points O-01, O-02, O-03 et O-08 ont été tranchés par l’utilisateur le 14 septembre 2026 et appliqués dans le client. Les autres ambiguïtés (O-04, O-05, O-06, O-09) restent ouvertes pour le moteur Python.
+Les points O-01, O-02, O-03, O-04 et O-08 ont été tranchés et appliqués. Les autres ambiguïtés (O-05, O-06, O-09) restent ouvertes pour le moteur Python.
 
 ---
 

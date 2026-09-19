@@ -27,3 +27,19 @@ class AdvanceBody(BaseModel):
     n: int = Field(ge=1, le=6)
     command_id: str = Field(min_length=1)
     expected_version: int
+
+
+class HumanPlayCreate(BaseModel):
+    agent_player: int = Field(default=1, ge=1, le=2)
+    opponent: str = Field(default="human", pattern="^(human|ai)$")
+    checkpoint: str | None = None
+    seed: int | None = None
+
+
+class HumanPlayStep(BaseModel):
+    action_id: int | None = Field(default=None, ge=0)
+    cancel: bool = False
+
+
+class HumanPlaySave(BaseModel):
+    path: str | None = None

@@ -1,0 +1,11 @@
+{
+  "episodes": 200,
+  "win_rate": 0.915,
+  "draw_rate": 0.005,
+  "loss_rate": 0.08,
+  "mean_score_agent": 222.375,
+  "mean_score_opponent": 177.515,
+  "mean_fox_agent": 2.825,
+  "mean_min_zone_agent": 15.84,
+  "mean_zones_completed": 0.0
+}

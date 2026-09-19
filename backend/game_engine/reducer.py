@@ -6,7 +6,14 @@ import copy
 import random
 from typing import Any
 
-from .bonuses import PINK_BONUSES, PINK_MULTIPLIERS, apply_unlocks, empty_bonus_state, joker_token_value
+from .bonuses import (
+    PINK_BONUSES,
+    PINK_MULTIPLIERS,
+    apply_unlocks,
+    consume_joker_token,
+    empty_bonus_state,
+    pick_joker_token,
+)
 from .rules import (
     active_context,
     all_unchecked_turquoise,
@@ -51,7 +58,6 @@ NO_DIE_MOVE = "Aucun coup possible avec ce dé."
 NO_COLOR_MOVE = "Cette couleur ne permet aucun coup."
 JOKER_NEED_VALUE = "Joker : choisissez d'abord une valeur."
 JOKER_PICK_DIE = "Joker : choisissez un dé à transformer."
-JOKER_NEED_AVAILABLE = "Le joker s'applique à un dé disponible."
 PINK_CHOICE_MSG = "Case rose : choisissez les points ou le bonus."
 BONUS_NO_VALUE = "Aucune case disponible pour cette valeur."
 FILL_SLOTS_MSG = "Compléter les dés actifs — sans effet. Ces choix ne produisent aucun coup."
@@ -743,42 +749,52 @@ def _act_select_die(state: GameState, action: Action, rng: random.Random) -> Gam
     joker_pending = state["joker_pending"]
     joker_applied = False
 
-    if joker_pending and phase["kind"] == "active":
-        if joker_pending.get("value") is None:
-            return {**state, "message": JOKER_NEED_VALUE}
-        target = state["dice"].get(color)
-        if not target or target["location"] != "available":
-            return {**state, "message": JOKER_NEED_AVAILABLE}
-        dice = {**dice, color: {**target, "joker_value": joker_pending["value"]}}
-        jb = boards[actor]["bonuses"]["joker"]
-        boards = {
-            **boards,
-            actor: {
-                **boards[actor],
-                "bonuses": {**boards[actor]["bonuses"], "joker": {**jb, "used": jb["used"] + 1}},
-            },
-        }
-        joker_pending = None
-        joker_applied = True
-
     d = dice.get(color)
     if not d:
         return state
+
+    # Validate the die against the current context (active / passive / +1 / fill-slots).
     if phase["kind"] == "active":
         if d["location"] != "available":
             return state
+    elif phase["kind"] == "fill-slots":
+        if d["location"] != "discarded":
+            return state
     elif phase["kind"] == "passive" and not phase["done"]:
         discarded_ok = any_discarded_die_has_move(state, phase["player"])
-        if discarded_ok:
-            if d["location"] != "discarded":
-                return state
-        elif d["location"] != "chosen":
+        pool = "discarded" if discarded_ok else "chosen"
+        if d["location"] != pool:
             return state
     elif phase["kind"] == "plus1" and state["plus1_active"] is not None:
+        if d["location"] not in ("chosen", "discarded"):
+            return state
         if color in state["plus1_used_dice"][state["plus1_active"]]:
             return state
     else:
         return state
+
+    # Apply the pending joker to the chosen die, consuming its token (JOKER-004).
+    if joker_pending:
+        if joker_pending.get("value") is None:
+            return {**state, "message": JOKER_NEED_VALUE}
+        joker_value = int(joker_pending["value"])
+        jb = boards[actor]["bonuses"]["joker"]
+        index = joker_pending.get("token_index")
+        if index is None:
+            index = pick_joker_token(jb, joker_value)
+        dice = {**dice, color: {**d, "joker_value": joker_value}}
+        new_jb = consume_joker_token(jb, index) if index is not None else {**jb, "used": jb["used"] + 1}
+        boards = {
+            **boards,
+            actor: {**boards[actor], "bonuses": {**boards[actor]["bonuses"], "joker": new_jb}},
+        }
+        joker_pending = None
+        joker_applied = True
+        d = dice[color]
+
+    # fill-slots: the joker only changes the die value; placement uses fill_slot_dummy.
+    if phase["kind"] == "fill-slots":
+        return {**state, "dice": dice, "boards": boards, "joker_pending": None} if joker_applied else state
 
     base: GameState = {**state, "dice": dice, "boards": boards, "joker_pending": None} if joker_applied else state
     value = effective_value(d)
@@ -995,36 +1011,42 @@ def _act_use_relance(state: GameState, rng: random.Random) -> GameState:
 
 
 def _act_start_joker(state: GameState, action: Action) -> GameState:
-    if state["bonus_resolution"] or state["pink_choice"]:
+    if state["bonus_resolution"] or state["pink_choice"] or state["selection"]:
         return state
-    phase = state["phase"]
-    if phase["kind"] != "active":
+    actor = _acting_player(state)
+    if actor is None:
         return state
-    jb = state["boards"][phase["player"]]["bonuses"]["joker"]
-    idx = jb["used"]
-    if idx >= jb["unlocked"]:
+    jb = state["boards"][actor]["bonuses"]["joker"]
+    if jb["unlocked"] <= jb["used"]:
         return state
     if state["joker_pending"]:
         return state
-    value = joker_token_value(idx)
+    # The value is always chosen by the player (tokens may be used in any order).
     return {
         **state,
-        "joker_pending": {"token_index": idx, "value": value},
+        "joker_pending": {"token_index": None, "value": None},
         "selection": None,
-        "message": JOKER_NEED_VALUE if value is None else JOKER_PICK_DIE,
+        "message": JOKER_NEED_VALUE,
     }
 
 
 def _act_set_joker_value(state: GameState, action: Action) -> GameState:
-    if state["phase"]["kind"] != "active":
-        return state
     jp = state["joker_pending"]
     if not jp or jp.get("value") is not None:
         return state
-    value = action["value"]
-    if value < 1 or value > 6:
+    actor = _acting_player(state)
+    if actor is None:
         return state
-    return {**state, "joker_pending": {**jp, "value": value}, "message": JOKER_PICK_DIE}
+    value = action["value"]
+    jb = state["boards"][actor]["bonuses"]["joker"]
+    index = pick_joker_token(jb, value)
+    if index is None:
+        return state
+    return {
+        **state,
+        "joker_pending": {"token_index": index, "value": int(value)},
+        "message": JOKER_PICK_DIE,
+    }
 
 
 def _act_cancel_joker(state: GameState) -> GameState:

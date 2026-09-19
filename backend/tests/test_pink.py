@@ -65,11 +65,14 @@ def test_n03_joker_then_pink_cell_2():
     )
     rng = _rng()
     state = game_reducer(state, {"type": "start_joker", "token_index": 0}, rng)
+    assert state["joker_pending"] == {"token_index": None, "value": None}
+    state = game_reducer(state, {"type": "set_joker_value", "value": 3}, rng)
     assert state["joker_pending"] == {"token_index": 0, "value": 3}
     state = game_reducer(state, {"type": "select_die", "color": "pink"}, rng)
     assert state["selection"]["value"] == 3
     assert state["selection"]["elimination_value"] == 6
     assert state["boards"][1]["bonuses"]["joker"]["used"] == 1
+    assert state["boards"][1]["bonuses"]["joker"]["used_tokens"] == [0]
     state = game_reducer(state, {"type": "confirm_move"}, rng)
     assert "pink-cell-2" not in state["boards"][1]["values"]
     assert state["pink_choice"]["position"] == 2

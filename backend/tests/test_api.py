@@ -30,7 +30,7 @@ def test_health():
 def test_create_and_get_game():
     c = _client()
     created = c.post("/games", json={"seed": 11}).json()
-    assert created["rulesVersion"] == "1.1"
+    assert created["rulesVersion"] == "1.2"
     assert created["state"]["globalTurn"] == 1
     assert created["legalActions"]
     got = c.get(f"/games/{created['id']}").json()

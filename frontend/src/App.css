@@ -1178,3 +1178,133 @@
   color: #1c6b1c;
 }
 
+
+/* ---- Play view ---- */
+.play-view {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.play-title {
+  margin: 0;
+  text-align: center;
+}
+
+.play-muted {
+  color: #666;
+  text-align: center;
+  margin: 0.25rem 0;
+}
+
+.play-seat {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin: 0.5rem 0;
+}
+
+.play-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  justify-content: center;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  background: #fafafa;
+}
+
+.play-banner {
+  font-weight: 700;
+}
+
+.play-meta {
+  color: #555;
+  font-size: 0.9rem;
+}
+
+.play-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.play-ai-move {
+  text-align: center;
+  font-style: italic;
+  color: #444;
+}
+
+.play-action-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+}
+
+.play-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.play-action-index {
+  display: inline-block;
+  min-width: 1.4em;
+  text-align: right;
+  font-weight: 700;
+  color: #2b2b2b;
+}
+
+.play-action-hint {
+  color: #888;
+  font-style: italic;
+}
+
+.play-result {
+  text-align: center;
+  font-weight: 700;
+}
+
+/* ---- Turquoise zone: stronger checked vs empty contrast (shape + ✓, not colour-only) ---- */
+.zone-turquoise .checkbox-cell {
+  background: #f2fbfa;
+  border-color: #6fb8b3;
+}
+.zone-turquoise .checkbox-cell.is-turquoise-dark {
+  background: #0f5f5a;
+  border-color: #0b4a46;
+}
+.zone-turquoise .checkbox-cell.is-checked {
+  background: #00a99d;
+  border-color: #00695f;
+}
+.zone-turquoise .checkbox-cell.is-turquoise-dark.is-checked {
+  background: #00c2b2;
+  border-color: #00544c;
+}
+.zone-turquoise .checkbox-cell .cell-number {
+  color: #0b3d39;
+}
+.zone-turquoise .checkbox-cell.is-turquoise-dark .cell-number,
+.zone-turquoise .checkbox-cell.is-checked .cell-number {
+  color: #ffffff;
+}
+.zone-turquoise .checkbox-cell .cell-check {
+  color: #ffffff;
+  font-size: 0.9rem;
+  text-shadow: 0 0 2px rgba(0, 0, 0, 0.75);
+}
+/* Keep destinations / provisional picks visible above the turquoise base. */
+.zone-turquoise .checkbox-cell.is-highlighted {
+  background: #e8f0fe;
+  border-color: #0b57d0;
+  box-shadow: 0 0 0 2px #0b57d0;
+}
+.zone-turquoise .checkbox-cell.is-provisional {
+  background: #fff59d;
+  border-color: #f9a825;
+  box-shadow: 0 0 0 2px #f9a825;
+}

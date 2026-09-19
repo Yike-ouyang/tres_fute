@@ -48,6 +48,57 @@ def joker_token_label(index: int) -> str:
     return "?" if v is None else str(v)
 
 
+def joker_used_tokens(tally: dict[str, Any]) -> list[int]:
+    """Indices de jetons joker déjà consommés (tolérant si le champ est absent)."""
+    return list(tally.get("used_tokens") or [])
+
+
+def available_joker_values(tally: dict[str, Any]) -> list[int]:
+    """Valeurs de joker sélectionnables (jetons débloqués non consommés).
+
+    Jetons numérotés `3,4,5,6` puis jetons « wild » (valeur au choix 1…6).
+    """
+    used = set(joker_used_tokens(tally))
+    values: list[int] = []
+    wild = False
+    for index in range(int(tally["unlocked"])):
+        if index in used:
+            continue
+        v = joker_token_value(index)
+        if v is None:
+            wild = True
+        elif v not in values:
+            values.append(v)
+    if wild:
+        for v in range(1, 7):
+            if v not in values:
+                values.append(v)
+    return sorted(values)
+
+
+def pick_joker_token(tally: dict[str, Any], value: int) -> int | None:
+    """Index du jeton à consommer pour ``value`` (jeton numéroté prioritaire, sinon wild)."""
+    used = set(joker_used_tokens(tally))
+    wild: int | None = None
+    for index in range(int(tally["unlocked"])):
+        if index in used:
+            continue
+        v = joker_token_value(index)
+        if v == value:
+            return index
+        if v is None and wild is None:
+            wild = index
+    return wild
+
+
+def consume_joker_token(tally: dict[str, Any], index: int) -> dict[str, Any]:
+    """Marque le jeton ``index`` consommé et incrémente le compteur ``used``."""
+    used = joker_used_tokens(tally)
+    if index not in used:
+        used.append(index)
+    return {**tally, "used": int(tally["used"]) + 1, "used_tokens": used}
+
+
 GOLD_ROW1: list[BonusEffect] = [relance, joker, die("pink"), plus1, die("turquoise"), fox]
 GOLD_ROW2: list[BonusEffect] = [
     joker,
@@ -316,7 +367,7 @@ def empty_bonus_state() -> BonusState:
     return {
         "relance": {"unlocked": 0, "used": 0},
         "plus1": {"unlocked": 0, "used": 0},
-        "joker": {"unlocked": 0, "used": 0},
+        "joker": {"unlocked": 0, "used": 0, "used_tokens": []},
         "slots_unlocked": {},
     }
 

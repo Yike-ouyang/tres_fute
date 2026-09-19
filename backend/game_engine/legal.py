@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from .bonuses import available_joker_values
 from .rules import (
     active_context,
     any_available_die_has_move,
@@ -36,6 +37,45 @@ def remaining_autoplay_turns(state: GameState) -> int:
     if is_global_turn_complete(state):
         return max(0, 6 - state["global_turn"])
     return max(0, 7 - state["global_turn"])
+
+
+def _has_joker(state: GameState, actor: int) -> bool:
+    jb = state["boards"][actor]["bonuses"]["joker"]  # type: ignore[index]
+    return jb["unlocked"] > jb["used"]
+
+
+def _joker_actor(state: GameState) -> int | None:
+    """Acteur de la décision courante pour un joker (active/passive/+1/fill-slots)."""
+    phase = state["phase"]
+    if phase["kind"] in ("active", "fill-slots"):
+        return phase["player"]
+    if phase["kind"] == "passive" and not phase["done"]:
+        return phase["player"]
+    if phase["kind"] == "plus1" and state["plus1_active"] is not None:
+        return state["plus1_active"]
+    return None
+
+
+def _joker_selectable(state: GameState) -> list:
+    """Dés transformables par un joker dans le contexte courant."""
+    phase = state["phase"]
+    if phase["kind"] == "active":
+        return [c for c in ALL_DIE_COLORS if state["dice"][c]["location"] == "available"]
+    if phase["kind"] == "fill-slots":
+        return [c for c in ALL_DIE_COLORS if state["dice"][c]["location"] == "discarded"]
+    if phase["kind"] == "passive" and not phase["done"]:
+        discarded_ok = any_discarded_die_has_move(state, phase["player"])
+        pool = "discarded" if discarded_ok else "chosen"
+        return [c for c in ALL_DIE_COLORS if state["dice"][c]["location"] == pool]
+    if phase["kind"] == "plus1" and state["plus1_active"] is not None:
+        actor = state["plus1_active"]
+        already = set(state["plus1_used_dice"][actor])
+        return [
+            c
+            for c in ALL_DIE_COLORS
+            if state["dice"][c]["location"] in ("chosen", "discarded") and c not in already
+        ]
+    return []
 
 
 def legal_actions(state: GameState) -> list[Action]:
@@ -114,19 +154,19 @@ def legal_actions(state: GameState) -> list[Action]:
 
     if state["joker_pending"]:
         if state["joker_pending"].get("value") is None:
-            return [{"type": "set_joker_value", "value": v} for v in range(1, 7)]
-        return [
-            {"type": "select_die", "color": c}
-            for c in ALL_DIE_COLORS
-            if state["dice"][c]["location"] == "available"
-        ]
+            actor = _joker_actor(state)
+            if actor is None:
+                return []
+            tally = state["boards"][actor]["bonuses"]["joker"]  # type: ignore[index]
+            return [{"type": "set_joker_value", "value": v} for v in available_joker_values(tally)]
+        return [{"type": "select_die", "color": c} for c in _joker_selectable(state)]
 
     if phase["kind"] == "fill-slots":
-        return [
-            {"type": "fill_slot_dummy", "color": c}
-            for c in ALL_DIE_COLORS
-            if state["dice"][c]["location"] == "discarded"
-        ]
+        discarded = [c for c in ALL_DIE_COLORS if state["dice"][c]["location"] == "discarded"]
+        acts: list[Action] = [{"type": "fill_slot_dummy", "color": c} for c in discarded]
+        if discarded and _has_joker(state, phase["player"]):
+            acts.insert(0, {"type": "start_joker"})
+        return acts
 
     if phase["kind"] == "plus1" and state["plus1_active"] is None:
         actor = phase["order"][phase["current"]]
@@ -138,31 +178,29 @@ def legal_actions(state: GameState) -> list[Action]:
 
     if phase["kind"] == "plus1" and state["plus1_active"] is not None:
         actor = state["plus1_active"]
-        already = set(state["plus1_used_dice"][actor])
-        selectable = [
-            c
-            for c in ALL_DIE_COLORS
-            if c not in already and die_has_any_legal_move(c, passive_context(state, actor, c))
-        ]
+        pool = _joker_selectable(state)
+        selectable = [c for c in pool if die_has_any_legal_move(c, passive_context(state, actor, c))]
+        acts: list[Action] = [{"type": "select_die", "color": c} for c in selectable]
+        if pool and _has_joker(state, actor):
+            acts.insert(0, {"type": "start_joker"})
         if not selectable:
-            return [{"type": "skip_plus1"}]
-        return [{"type": "select_die", "color": c} for c in selectable]
+            acts.append({"type": "skip_plus1"})
+        return acts
 
     if phase["kind"] == "passive" and phase["done"]:
         return [{"type": "continue"}]
 
     if phase["kind"] == "passive" and not phase["done"]:
         discarded_ok = any_discarded_die_has_move(state, phase["player"])
-        pool = "discarded" if discarded_ok else "chosen"
-        selectable = [
-            c
-            for c in ALL_DIE_COLORS
-            if state["dice"][c]["location"] == pool
-            and die_has_any_legal_move(c, passive_context(state, phase["player"], c))
-        ]
+        pool_name = "discarded" if discarded_ok else "chosen"
+        pool = [c for c in ALL_DIE_COLORS if state["dice"][c]["location"] == pool_name]
+        selectable = [c for c in pool if die_has_any_legal_move(c, passive_context(state, phase["player"], c))]
+        acts = [{"type": "select_die", "color": c} for c in selectable]
+        if pool and _has_joker(state, phase["player"]):
+            acts.insert(0, {"type": "start_joker"})
         if not selectable:
-            return [{"type": "pass_passive"}]
-        return [{"type": "select_die", "color": c} for c in selectable]
+            acts.append({"type": "pass_passive"})
+        return acts
 
     if phase["kind"] == "active":
         acts = []
@@ -171,7 +209,7 @@ def legal_actions(state: GameState) -> list[Action]:
         if available_count > 0 and board["bonuses"]["relance"]["unlocked"] > board["bonuses"]["relance"]["used"]:
             acts.append({"type": "use_relance"})
         if available_count > 0 and board["bonuses"]["joker"]["unlocked"] > board["bonuses"]["joker"]["used"]:
-            acts.append({"type": "start_joker", "token_index": board["bonuses"]["joker"]["used"]})
+            acts.append({"type": "start_joker"})
         for color in ALL_DIE_COLORS:
             if state["dice"][color]["location"] != "available":
                 continue
@@ -205,8 +243,7 @@ def current_decision(state: GameState) -> dict:
             return {"kind": "confirm_move", "actor": actor}
         return {"kind": "pick_cell", "actor": actor}
     if state["joker_pending"]:
-        phase = state["phase"]
-        actor = phase["player"] if phase["kind"] == "active" else None
+        actor = _joker_actor(state)
         if state["joker_pending"].get("value") is None:
             return {"kind": "set_joker_value", "actor": actor}
         return {"kind": "select_die", "actor": actor, "joker": True}

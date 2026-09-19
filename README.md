@@ -25,10 +25,10 @@ variant of *Très Futé*.
 
 This repository is a complete implementation of a two-player *Très Futé* duel:
 
-- 🧠 **A pure rules engine** (`game_engine/`) that is the single source of truth, isolated from transport and rendering.
-- 🌐 **A FastAPI service** (`api/`) that transports state, manages games and serves replays.
+- 🧠 **A pure rules engine** (`backend/game_engine/`) that is the single source of truth, isolated from transport and rendering.
+- 🌐 **A FastAPI service** (`backend/api/`) that transports state, manages games and serves replays.
 - 🎨 **A React + TypeScript interface** (`frontend/`): interactive board, auto-advance and a replay viewer.
-- 🤖 **Two Gymnasium environments** (`rl_env/`, `rl_env_2/`) and a **MaskablePPO** training pipeline (`sb3-contrib`).
+- 🤖 **Two Gymnasium environments** (`agent/rl_env/`, `agent/rl_env_2/`) and a **MaskablePPO** training pipeline (`sb3-contrib`).
 - 🎬 **A replay system**: checkpoints don't store the game, but the environment is deterministic, so any match is regenerated exactly from its seed.
 
 <div align="center">
@@ -44,13 +44,13 @@ This repository is a complete implementation of a two-player *Très Futé* duel:
 | | |
 |---|---|
 | 🎲 **Complete game** | Two players on one screen, 6 turns, 5 score zones, pink/fox bonuses, reroll, joker and +1. |
-| 🔒 **Centralised rules** | All logic lives in `backend/game_engine/`, versioned (`REGLES_DU_JEU.md` **v1.1**). |
+| 🔒 **Centralised rules** | All logic lives in `backend/game_engine/`, versioned (`REGLES_DU_JEU.md` **v1.2**). |
 | ⚡ **Stateless API** | In-memory store, per-game locking, idempotent `command_id`, `expected_version` to prevent desync. |
 | 🖥️ **Front end without game logic** | React only renders and sends actions; no scoring, no validation. |
 | 🧪 **Tested everywhere** | `pytest` on the Python side, `vitest` on the TypeScript side. |
 | 🏋️ **Reproducible RL** | Everything is seeded; checkpoint opponent, reward curriculum and shaped rewards. |
 | 🎬 **Built-in replays** | Regenerated JSON traces, served by `GET /replays`, browsable in the **Replay** tab. |
-| ☁️ **Remote training** | Server-ready script (`scripts/run_shaped_remote.sh`) + TensorBoard over an SSH tunnel. |
+| ☁️ **Remote training** | Server-ready script (`agent/scripts/run_shaped_remote.sh`) + TensorBoard over an SSH tunnel. |
 
 ---
 
@@ -60,28 +60,30 @@ This repository is a complete implementation of a two-player *Très Futé* duel:
                  browser (React + Vite)
                         │  REST /api
                         ▼
-                 FastAPI (api/)  ──►  GameEngine (game_engine/)
-                        │                   ▲
-                        │                   │ reset / step
-                        ▼                   │
-                 replays JSON        rl_env / rl_env_2 (Gymnasium)
-                        │                   ▲
-                        └── GET /replays    │ action (int) + mask
-                                     MaskablePPO (sb3-contrib)
+                 FastAPI (backend/api)  ──►  GameEngine (backend/game_engine)
+                        │                            ▲
+                        │                            │ reset / step
+                        ▼                            │
+                 replays JSON                 agent/rl_env(_2) (Gymnasium)
+                        │                            ▲
+                        └── GET /replays             │ action (int) + mask
+                                              MaskablePPO (sb3-contrib)
 ```
 
 ```
 tres_fute/
-├── backend/
-│   ├── game_engine/     # 🧠 pure rules + scoring (source of truth)
-│   ├── api/             # 🌐 FastAPI: /games, /replays
-│   ├── simulation/      # 🎮 games without HTTP (HeuristicPolicy)
-│   ├── rl_env/          # 🤖 env v1: observation 1.0, 316 actions
-│   ├── rl_env_2/        # 🤖 env v2: observation 2.0, 149 actions, checkpoint
-│   ├── scripts/         # ☁️ run_shaped_remote.sh (server training)
-│   └── runs/            # 💾 checkpoints & replays (gitignored)
-├── frontend/            # 🎨 React + TypeScript + Vite
-├── REGLES_DU_JEU.md     # 📜 variant specification (v1.1)
+├── agent/                  # 🤖 reinforcement learning
+│   ├── rl_env/             # env v1: observation 1.0, 316 actions
+│   ├── rl_env_2/           # env v2: observation 2.0, 149 actions, checkpoint
+│   ├── runs/               # 💾 checkpoints & replays (gitignored)
+│   └── scripts/            # ☁️ run_shaped_remote.sh (server training)
+├── backend/                # 🧠 game engine + API
+│   ├── game_engine/        # pure rules + scoring (source of truth)
+│   ├── api/                # 🌐 FastAPI: /games, /replays
+│   └── simulation/         # 🎮 games without HTTP (HeuristicPolicy)
+├── frontend/               # 🎨 React + TypeScript + Vite
+├── .venv/                  # shared virtualenv (gitignored)
+├── REGLES_DU_JEU.md        # 📜 variant specification (v1.2)
 └── README.md
 ```
 
@@ -89,13 +91,32 @@ tres_fute/
 
 ## 🚀 Quick start
 
+### 0. Shared virtual environment (repo root)
+
+```bash
+cd tres_fute
+uv venv .venv --python 3.12
+source .venv/bin/activate
+
+# CPU PyTorch (recommended) + dependencies
+uv pip install --index-url https://download.pytorch.org/whl/cpu torch
+uv pip install stable-baselines3==2.9.0 sb3-contrib==2.9.0 gymnasium==1.3.0 \
+  numpy tensorboard marimo==0.24.2 fastapi "uvicorn[standard]" matplotlib pytest httpx2
+```
+
+<details>
+<summary>Alternative: exact <code>pip freeze</code> (includes CUDA wheels, ~5.7 GB)</summary>
+
+```bash
+uv venv .venv --python 3.12
+uv pip install --python .venv/bin/python -r backend/requirements.txt
+```
+</details>
+
 ### 1. Backend (API + engine)
 
 ```bash
 cd backend
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
 uvicorn api.app:app --reload --host 127.0.0.1 --port 8000
 ```
 
@@ -127,7 +148,9 @@ VITE_API_URL=http://127.0.0.1:8000 npm run dev
 ## 🤖 Reinforcement Learning environments
 
 Two Gymnasium environments wrap the **same engine**. The second one is a
-simplified, faster-to-learn variant.
+simplified, faster-to-learn variant. Both live under `agent/`; the shared
+`game_engine` and `simulation` stay under `backend/` (the path bootstrap of each
+entry point adds both roots).
 
 | | `rl_env` (v1) | `rl_env_2` (v2) |
 |---|---|---|
@@ -141,7 +164,8 @@ simplified, faster-to-learn variant.
 ### Train
 
 ```bash
-cd backend && source .venv/bin/activate
+source .venv/bin/activate
+cd agent
 
 # Solo run, reward Δ(score)/100
 python rl_env_2/train_solo_score_delta.py --timesteps 4000000 --n-envs 4
@@ -156,7 +180,7 @@ python rl_env_2/train_sequence.py --timesteps 1000000
 launched from the notebook — or headless through the server script:
 
 ```bash
-cd backend
+cd agent
 marimo edit rl_env_2/shaped_reward_training.py     # 🎛️ interactive
 
 scripts/run_shaped_remote.sh install               # ☁️ server (once)
@@ -174,12 +198,12 @@ ssh -N -L 6007:127.0.0.1:6006 <user>@<server>
 ### Replay a model
 
 ```bash
-cd backend && source .venv/bin/activate
-python rl_env_2/watch_best_model.py \
-  --model runs/solo_<timestamp>/score_delta_solo/best_model.zip --seed 2000000
+source .venv/bin/activate
+python agent/rl_env_2/watch_best_model.py \
+  --model agent/runs/solo_<timestamp>/score_delta_solo/best_model.zip --seed 2000000
 ```
 
-Traces are written to `runs/<run>/replays/`, served by `GET /replays` and
+Traces are written to `agent/runs/<run>/replays/`, served by `GET /replays` and
 displayed in the front end's **Replay** tab.
 
 ---
@@ -187,8 +211,9 @@ displayed in the front end's **Replay** tab.
 ## 🧪 Tests
 
 ```bash
-# Backend
-cd backend && source .venv/bin/activate
+# Backend (imports agent/rl_env and agent/rl_env_2 via pytest.ini)
+cd backend
+source ../.venv/bin/activate
 pytest
 
 # Frontend
@@ -202,10 +227,10 @@ npm test
 
 | Document | Content |
 |---|---|
-| 📜 [`REGLES_DU_JEU.md`](REGLES_DU_JEU.md) | Normative specification of the variant (v1.1) |
+| 📜 [`REGLES_DU_JEU.md`](REGLES_DU_JEU.md) | Normative specification of the variant (v1.2) |
 | 🐍 [`backend/README.md`](backend/README.md) | Engine, API, routes, simulation, replays |
-| 🤖 [`backend/rl_env/README.md`](backend/rl_env/README.md) | Gymnasium environment v1 |
-| 🕹️ [`backend/rl_env_2/README.md`](backend/rl_env_2/README.md) | Environment v2, observations/actions 2.0, training |
+| 🤖 [`agent/rl_env/README.md`](agent/rl_env/README.md) | Gymnasium environment v1 |
+| 🕹️ [`agent/rl_env_2/README.md`](agent/rl_env_2/README.md) | Environment v2, observations/actions 2.0, training |
 | 🎨 [`frontend/README.md`](frontend/README.md) | React interface, board layout |
 
 ---

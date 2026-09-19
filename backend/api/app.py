@@ -15,6 +15,7 @@ from game_engine.legal import remaining_autoplay_turns
 from simulation.policy import run_autoplay
 
 from .replays import router as replays_router
+from .human_play_routes import router as human_play_router
 from .schemas import ActionBody, AdvanceBody, CreateGameBody, ResetBody
 from .store import GameRecord, store
 
@@ -27,6 +28,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(replays_router)
+app.include_router(human_play_router)
 
 
 def snapshot(game_id: str, record: GameRecord) -> dict[str, Any]:

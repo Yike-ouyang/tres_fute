@@ -2,10 +2,20 @@ brouillon
 frontend/node_modules
 .gitignore
 frontend/dist
+
+# virtualenvs (général à la racine du dépôt + ancien venv backend)
+.venv
 backend/.venv
+
+# caches Python / pytest
+.pytest_cache
 backend/.pytest_cache
-backend/**/__pycache__
-backend/**/*.pyc
-backend/rl_env/__pycache__
-backend/runs/essai_01
+**/__pycache__
+**/*.pyc
+
+# artefacts d'entraînement et modèles (volumineux)
+agent/runs
 backend/runs
+
+# script généré depuis le notebook marimo
+agent/rl_env_2/train_shaped.py

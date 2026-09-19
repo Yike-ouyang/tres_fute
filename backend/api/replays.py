@@ -20,30 +20,31 @@ router = APIRouter(tags=["replays"])
 _ID_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
 
 
-def _runs_root() -> Path:
+def _runs_roots() -> list[Path]:
     override = os.environ.get("TRES_FUTE_RUNS_DIR")
     if override:
-        return Path(override)
-    # backend/api/replays.py -> backend/runs
-    return Path(__file__).resolve().parents[1] / "runs"
+        return [Path(override)]
+    # backend/api/replays.py -> <repo>/agent ; runs may live in agent/ or agent/runs/
+    agent = Path(__file__).resolve().parents[2] / "agent"
+    return [agent, agent / "runs"]
 
 
 def _scan() -> dict[str, dict[str, Any]]:
-    root = _runs_root()
     found: dict[str, dict[str, Any]] = {}
-    if not root.exists():
-        return found
-    for manifest_path in sorted(root.glob("*/replays/index.json")):
-        try:
-            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
+    for root in _runs_roots():
+        if not root.exists():
             continue
-        for entry in manifest.get("replays", []):
-            replay_id = entry.get("id")
-            file_name = entry.get("file")
-            if not replay_id or not file_name or not _ID_RE.match(str(replay_id)):
+        for manifest_path in sorted(root.glob("*/replays/index.json")):
+            try:
+                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
                 continue
-            found[str(replay_id)] = {"entry": entry, "path": manifest_path.parent / str(file_name)}
+            for entry in manifest.get("replays", []):
+                replay_id = entry.get("id")
+                file_name = entry.get("file")
+                if not replay_id or not file_name or not _ID_RE.match(str(replay_id)):
+                    continue
+                found[str(replay_id)] = {"entry": entry, "path": manifest_path.parent / str(file_name)}
     return found
 
 
